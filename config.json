@@ -1,0 +1,29 @@
+{
+    "osc_server": {
+        "listen_ip": "localhost",
+        "listen_port": 53000
+    },
+    "flask_server": {
+        "ip": "localhost",
+        "port": 5009
+    },
+    "targets": [
+        {
+            "name": "cogs",
+            "type": "osc",
+            "ip": "192.168.50.248",
+            "port": 12097
+        }
+    ],
+    "routes": [
+        {
+            "from": {
+                "protocol": "http",
+                "endpoint": "/send_osc"
+            },
+            "to": {
+                "target_name": "cogs"
+            }
+        }
+    ]
+}

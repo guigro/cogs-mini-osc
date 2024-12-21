@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini OSC for Cogs</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/js/all.min.js"></script>
+</head>
+
+<body>
+    <section class="section">
+        <div class="container">
+            <h1 class="title">Mini OSC for Cogs</h1>
+            <p class="subtitle">Manage targets and routes for network requests in Cogs !</p>
+
+            <div class="tabs is-boxed">
+                <ul>
+                    <li class="is-active" id="tab-servers" onclick="showTab('servers')"><a>Servers config</a></li>
+                    <li id="tab-targets" onclick="showTab('targets')"><a>Targets</a></li>
+                    <li id="tab-routes" onclick="showTab('routes')"><a>Routes</a></li>
+                    <li id="tab-logs" onclick="showTab('logs')"><a>Logs</a></li>
+                </ul>
+            </div>
+
+            <!-- Serveurs Configuration (OSC + Flask) -->
+            <div id="content-servers" class="box">
+                <h2 class="title is-4">Servers parameters</h2>
+                <div id="server-summary" class="notification is-info"></div>
+                <!-- Display local IP -->
+                <div id="local-ip" class="notification is-primary">
+                    Local Server IP: <span id="local-ip-value"></span>
+                </div>
+                <div class="columns">
+                    <!-- OSC Server -->
+                    <div class="column">
+                        <h3 class="title is-5">OSC server</h3>
+                        <div class="field">
+                            <label class="label">IP Address</label>
+                            <input id="osc_ip" class="input" type="text">
+                        </div>
+                        <div class="field">
+                            <label class="label">Port</label>
+                            <input id="osc_port" class="input" type="number">
+                        </div>
+                        <button class="button is-info" onclick="updateOSCServer()">Update</button>
+                    </div>
+                    <!-- Flask Server -->
+                    <div class="column">
+                        <h3 class="title is-5">Flask server</h3>
+                        <div class="field">
+                            <label class="label">Port</label>
+                            <input id="flask_port" class="input" type="number">
+                        </div>
+                        <button class="button is-info" onclick="updateFlaskServer()">Update</button>
+                        <div id="flask-restart" style="display:none;" class="notification is-warning">
+                            <p>The port has been modified. Relaunch the app manually to apply changes.</p>
+                            <a id="new-url" class="button is-primary" target="_blank">And then, go to the new URL</a>
+                        </div>
+                    </div>
+                </div>
+                <!-- Cogs Configuration -->
+                <div class="box">
+                    <h3 class="title is-5">Target: Cogs</h3>
+                    <div class="field">
+                        <label class="label">IP Address</label>
+                        <input id="cogs_ip" class="input" type="text" value="">
+                    </div>
+                    <div class="field">
+                        <label class="label">Port</label>
+                        <input id="cogs_port" class="input" type="number" value="">
+                    </div>
+                    <div class="notification is-danger">Warning: If you work in a virtual environment, setup the IP address here and not just "localhost" or it won't work.</div>
+                    <button class="button is-info" onclick="updateCogsTarget()">Update</button>
+                </div>
+            </div>
+
+            <!-- Targets Management -->
+            <div id="content-targets" class="box is-hidden">
+                <h2 class="title is-4">Targets</h2>
+                <table class="table is-fullwidth">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Details</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="targets-list"></tbody>
+                </table>
+                <button class="button is-success" onclick="showAddTargetForm()">Add Target</button>
+                <div id="add-target-form" style="display:none;">
+                    <div class="field">
+                        <label class="label">Name</label>
+                        <input id="target_name" class="input" type="text">
+                    </div>
+                    <div class="field">
+                        <label class="label">Type</label>
+                        <div class="select">
+                            <select id="target_type" onchange="updateTargetFormFields()">
+                                <option value="">-- Select a protocol --</option>
+                                <option value="http">HTTP</option>
+                                <option value="tcp">TCP</option>
+                                <option value="udp">UDP</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Champs dynamiques -->
+                    <div id="address-port-fields" style="display:none;">
+                        <div class="field">
+                            <label class="label">Address</label>
+                            <input id="target_address" class="input" type="text" placeholder="0.0.0.0">
+                        </div>
+                        <div class="field">
+                            <label class="label">Port</label>
+                            <input id="target_port" class="input" type="number" placeholder="5001">
+                        </div>
+                    </div>
+                    <div id="url-fields" style="display:none;">
+                        <div class="field">
+                            <label class="label">URL</label>
+                            <input id="target_url" class="input" type="text" placeholder="https://example.com">
+                        </div>
+                    </div>
+                    <button class="button is-primary" onclick="addTarget()">Add</button>
+                </div>
+            </div>
+
+            <!-- Routes Management -->
+            <div id="content-routes" class="box is-hidden">
+                <h2 class="title is-4">Routes</h2>
+                <table class="table is-fullwidth">
+                    <thead>
+                        <tr>
+                            <th>Protocol</th>
+                            <th>Endpoint (or Address)</th>
+                            <th>Target</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="routes-list"></tbody>
+                </table>
+                <button class="button is-success" onclick="showAddRouteForm()">Add Route</button>
+                <div id="add-route-form" style="display:none;">
+                    <div class="field">
+                        <label class="label">Source Protocol (From)</label>
+                        <div class="select">
+                            <select id="route_from" onchange="updateRouteFromFields()">
+                                <option value="">-- Select a protocol --</option>
+                                <option value="osc">OSC</option>
+                                <option value="http">HTTP</option>
+                                <option value="tcp">TCP</option>
+                                <option value="udp">UDP</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="route-from-fields">
+                        <div class="field">
+                            <label class="label">Address Pattern</label>
+                            <input id="from_address_pattern" class="input" type="text" placeholder="/pattern">
+                        </div>
+                    </div> <!-- Champs dynamiques pour la source -->
+
+                    <div class="field">
+                        <label class="label">Target (To)</label>
+                        <div class="select">
+                            <select id="route_target" onchange="updateRouteToFields()">
+                                <!-- Les options seront chargées dynamiquement -->
+                            </select>
+                        </div>
+                    </div>
+                    <div id="route-to-fields"></div>
+
+
+                    <button class="button is-primary" onclick="addRoute()">Add</button>
+                </div>
+            </div>
+
+            <!-- Logs -->
+            <div id="content-logs" class="box is-hidden">
+                <h2 class="title is-4">Live logs</h2>
+                <pre id="logs" class="content">Loading logs...</pre>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        window.onload = fetchConfig;
+
+        function fetchConfig() {
+            fetch('/get_config').then(res => res.json()).then(config => {
+                document.getElementById('server-summary').innerHTML =
+                    `OSC: ${config.osc_server.listen_ip}:${config.osc_server.listen_port} | Flask: ${config.flask_server.port}`;
+                document.getElementById('osc_ip').value = config.osc_server.listen_ip;
+                document.getElementById('osc_port').value = config.osc_server.listen_port;
+                document.getElementById('flask_port').value = config.flask_server.port;
+                fetchTargets();
+                fetchRoutes();
+            });
+        }
+
+        function showTab(tab) {
+            const tabs = ['servers', 'targets', 'routes', 'logs'];
+            tabs.forEach(t => {
+                document.getElementById(`content-${t}`).classList.add('is-hidden');
+                document.getElementById(`tab-${t}`).classList.remove('is-active');
+            });
+            document.getElementById(`content-${tab}`).classList.remove('is-hidden');
+            document.getElementById(`tab-${tab}`).classList.add('is-active');
+        }
+
+        function showAddTargetForm() {
+            const form = document.getElementById('add-target-form');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function showAddRouteForm() {
+            const form = document.getElementById('add-route-form');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function updateFlaskServer() {
+            const port = document.getElementById('flask_port').value;
+            fetch('/update_flask_server', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ port })
+            }).then(() => {
+                const newUrl = `http://127.0.0.1:${port}`;
+                document.getElementById('flask-restart').style.display = 'block';
+                document.getElementById('new-url').href = newUrl;
+            });
+        }
+
+        function updateOSCServer() {
+            const ip = document.getElementById('osc_ip').value;
+            const port = document.getElementById('osc_port').value;
+            fetch('/update_osc_server', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip, port })
+            }).then(() => alert("OSC server updated with success !"))
+                .catch(err => alert("Error : " + err));
+        }
+
+        function updateTargetFormFields() {
+            const targetType = document.getElementById('target_type').value;
+
+            // Cacher tous les champs dynamiques
+            document.getElementById('address-port-fields').style.display = 'none';
+            document.getElementById('url-fields').style.display = 'none';
+
+            // Afficher les champs correspondants au type sélectionné
+            if (targetType === 'http') {
+                document.getElementById('url-fields').style.display = 'block';
+            } else if (targetType === 'osc' || targetType === 'tcp' || targetType === 'udp') {
+                document.getElementById('address-port-fields').style.display = 'block';
+            }
+        }
+
+
+        function addTarget() {
+            const name = document.getElementById('target_name').value;
+            const type = document.getElementById('target_type').value;
+
+            let targetConfig = { name, type };
+
+            if (type === 'http') {
+                targetConfig.url = document.getElementById('target_url').value;
+            } else if (type === 'osc' || type === 'tcp' || type === 'udp') {
+                targetConfig.address = document.getElementById('target_address').value;
+                targetConfig.port = document.getElementById('target_port').value;
+            }
+
+            fetch('/add_target', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(targetConfig)
+            }).then(() => {
+                fetchTargets();
+                document.getElementById('add-target-form').style.display = 'none';
+            }).catch(err => alert("Error: " + err));
+        }
+
+
+        function deleteTarget(index) {
+            fetch('/remove_target', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ index })
+            }).then(response => {
+                if (!response.ok) {
+                    throw new Error("Failed to delete the target !");
+                }
+                return response.json();
+            }).then(() => {
+                alert("The target has been deleted !");
+                fetchTargets(); // Recharge la liste des cibles
+            }).catch(err => {
+                alert("Error : " + err.message);
+            });
+        }
+
+        function fetchTargets() {
+            fetch('/get_config').then(res => res.json()).then(config => {
+                const targets = config.targets;
+                const table = document.getElementById('targets-list');
+                table.innerHTML = '';
+                targets.forEach((t, i) => {
+                    table.innerHTML += `<tr>
+                        <td>${t.name}</td>
+                        <td>${t.type}</td>
+                        <td>${t.ip || t.url || ''}:${t.port || ''}</td>
+                        <td>
+                    ${t.type !== 'osc'
+                            ? `<button class='button is-danger' onclick='deleteTarget(${i})'>Delete</button>`
+                            : ''
+                        }
+                </td>
+                    </tr>`;
+                });
+            });
+        }
+
+
+        function updateRouteFromFields() {
+            const protocol = document.getElementById('route_from').value;
+            const fromFields = document.getElementById('route-from-fields');
+            fromFields.innerHTML = ''; // Réinitialise les champs dynamiques
+
+            if (protocol === 'osc') {
+                fromFields.innerHTML = `
+            <div class="field">
+                <label class="label">Address Pattern</label>
+                <input id="from_address_pattern" class="input" type="text" placeholder="/pattern">
+            </div>`;
+            } else if (protocol === 'http') {
+                fromFields.innerHTML = `
+            <div class="field">
+                <label class="label">Endpoint</label>
+                <input id="from_endpoint" class="input" type="text" placeholder="/endpoint">
+            </div>`;
+            } else if (protocol === 'tcp' || protocol === 'udp') {
+                fromFields.innerHTML = `
+            <div class="field">
+                <label class="label">IP</label>
+                <input id="from_ip" class="input" type="text" placeholder="0.0.0.0">
+            </div>
+            <div class="field">
+                <label class="label">Port</label>
+                <input id="from_port" class="input" type="number" placeholder="5001">
+            </div>`;
+            }
+        }
+
+
+        // Ajoute une route avec les champs dynamiques
+        function addRoute() {
+            const protocol = document.getElementById('route_from').value;
+            const targetName = document.getElementById('route_target').value;
+
+            // Récupérer le type de la cible sélectionnée
+            const targetSelect = document.getElementById('route_target');
+            const targetType = targetSelect.options[targetSelect.selectedIndex].dataset.type;
+
+
+            let fromConfig = {};
+            if (protocol === 'osc') {
+                fromConfig = { protocol: 'osc', address_pattern: document.getElementById('from_address_pattern').value };
+            } else if (protocol === 'http') {
+                fromConfig = { protocol: 'http', endpoint: document.getElementById('from_endpoint').value };
+            } else if (protocol === 'tcp' || protocol === 'udp') {
+                fromConfig = {
+                    protocol: protocol,
+                    ip: document.getElementById('from_ip').value,
+                    port: document.getElementById('from_port').value
+                };
+            }
+
+            const toConfig = { target_name: targetName };
+
+            // Vérifier si la cible est de type OSC et inclure to_address
+            if (targetType === 'osc') {
+                const toAddressElement = document.getElementById('to_address');
+                if (toAddressElement) {
+                    toConfig.address = toAddressElement.value;
+                }
+            }
+            // Vérifier si la cible est de type HTTP et inclure to_url
+            else if (targetType === 'http') {
+                const toUrlElement = document.getElementById('to_url');
+                if (toUrlElement) {
+                    toConfig.url = toUrlElement.value;
+                }
+            }
+
+            const route = { from: fromConfig, to: toConfig };
+
+            fetch('/add_route', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(route)
+            }).then(() => {
+                alert("Route added with success !");
+                fetchRoutes();
+                document.getElementById('add-route-form').style.display = 'none';
+            }).catch(err => alert("Erreur : " + err));
+        }
+
+        function deleteRoute(index) {
+            fetch('/remove_route', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ index })
+            }).then(response => {
+                if (!response.ok) {
+                    throw new Error("Failed to delete the route !");
+                }
+                return response.json();
+            }).then(() => {
+                alert("The route has been deleted");
+                fetchTargets(); // Recharge la liste des cibles
+            }).catch(err => {
+                alert("Erreur : " + err.message);
+            });
+        }
+
+
+
+        function loadTargetsForRoutes() {
+            fetch('/get_config').then(res => res.json()).then(config => {
+                const targets = config.targets || [];
+                const targetSelect = document.getElementById('route_target');
+                targetSelect.innerHTML = '<option value="">-- Select a target --</option>';
+                targets.forEach(target => {
+                    if (target.name !== 'cogs') { // Vérifie que le nom de la cible n'est pas "cogs"
+                        targetSelect.innerHTML += `<option value="${target.name}" data-type="${target.type}">${target.name} (${target.type})</option>`;
+                    }
+                });
+            });
+        }
+
+        function updateRouteToFields() {
+            const targetSelect = document.getElementById('route_target');
+            const selectedType = targetSelect.options[targetSelect.selectedIndex].dataset.type;
+            const toFields = document.getElementById('route-to-fields');
+            toFields.innerHTML = '';
+
+            if (selectedType === 'osc') {
+                toFields.innerHTML = `<div class="field">
+            <label class="label">OSC address</label>
+            <input id="to_address" class="input" type="text" placeholder="/pattern">
+        </div>`;
+            }
+        }
+
+        function showAddRouteForm() {
+            const form = document.getElementById('add-route-form');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+            loadTargetsForRoutes(); // Charge les cibles existantes
+        }
+
+        function fetchRoutes() {
+            fetch('/get_config').then(res => res.json()).then(config => {
+                const routes = config.routes;
+                const targets = config.targets; // Nous utilisons les cibles pour récupérer leur type
+                const table = document.getElementById('routes-list');
+                table.innerHTML = '';
+
+                routes.forEach((r, i) => {
+                    let toAddress = '';
+
+                    // Trouve la cible correspondante dans la liste des cibles pour obtenir son type
+                    const target = targets.find(t => t.name === r.to.target_name);
+                    if (target && target.type === 'osc' && r.to.address) {
+                        toAddress = `<br><strong>Address:</strong> ${r.to.address}`;
+                    }
+
+                    table.innerHTML += `<tr>
+                <td>${r.from.protocol}</td>
+                <td>${r.from.address_pattern || r.from.endpoint || ''}</td>
+                <td>${r.to.target_name}</td>
+                <td>
+                    ${r.to.target_name !== 'cogs'
+                            ? `<button class='button is-danger' onclick='deleteRoute(${i})'>Delete</button>`
+                            : ''
+                        }
+                </td>
+            </tr>`;
+                });
+            }).catch(err => {
+                alert("Error while loading routes: " + err.message);
+            });
+        }
+
+        function fetchLogs() {
+            fetch('/get_logs')
+                .then(res => {
+                    if (!res.ok) {
+                        throw new Error(`HTTP error! Status: ${res.status}`);
+                    }
+                    return res.json();
+                })
+                .then(data => {
+                    const logsElement = document.getElementById('logs');
+                    if (Array.isArray(data)) {
+                        logsElement.innerHTML = data.map(log => `<p>${log}</p>`).join('');
+                    } else {
+                        logsElement.innerHTML = "<p>No log to display.</p>";
+                    }
+                })
+                .catch(err => {
+                    console.error("Error while fetching logs :", err);
+                    const logsElement = document.getElementById('logs');
+                    logsElement.innerHTML = `<p>Error : ${err.message}</p>`;
+                });
+        }
+
+        // Rafraîchir les logs toutes les 2 secondes
+        setInterval(fetchLogs, 2000);
+
+
+        // Fetch local IP
+        function fetchLocalIP() {
+            fetch('/get_local_ip').then(res => res.json()).then(data => {
+                document.getElementById('local-ip-value').textContent = data.local_ip;
+            });
+        }
+
+        // Update Cogs Target
+        function updateCogsTarget() {
+            const ip = document.getElementById('cogs_ip').value;
+            const port = document.getElementById('cogs_port').value;
+            fetch('/update_cogs_target', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip, port })
+            }).then(() => alert("Cogs target updated successfully!"));
+        }
+
+        // Fetch existing Cogs Target
+        function fetchCogsTarget() {
+            fetch('/get_config').then(res => res.json()).then(config => {
+                const cogsTarget = config.targets.find(target => target.name === 'cogs');
+                if (cogsTarget) {
+                    document.getElementById('cogs_ip').value = cogsTarget.ip || '';
+                    document.getElementById('cogs_port').value = cogsTarget.port || '';
+                }
+            });
+        }
+
+        window.onload = function () {
+            fetchConfig();
+            fetchLocalIP();
+            fetchCogsTarget();
+        };
+
+
+
+    </script>
+</body>
+
+</html>
