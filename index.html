@@ -32,34 +32,43 @@
                 <div id="local-ip" class="notification is-primary">
                     Local Server IP: <span id="local-ip-value"></span>
                 </div>
-                <div class="columns">
-                    <!-- OSC Server -->
-                    <div class="column">
-                        <h3 class="title is-5">OSC server</h3>
-                        <div class="field">
-                            <label class="label">IP Address</label>
-                            <input id="osc_ip" class="input" type="text">
-                        </div>
-                        <div class="field">
-                            <label class="label">Port</label>
-                            <input id="osc_port" class="input" type="number">
-                        </div>
-                        <button class="button is-info" onclick="updateOSCServer()">Update</button>
+
+                <!-- OSC Server -->
+                <div class="box">
+                    <h3 class="title is-5">OSC server</h3>
+                    <div class="field">
+                        <label class="label">IP Address</label>
+                        <input id="osc_ip" class="input" type="text">
                     </div>
-                    <!-- Flask Server -->
-                    <div class="column">
-                        <h3 class="title is-5">Flask server</h3>
-                        <div class="field">
-                            <label class="label">Port</label>
-                            <input id="flask_port" class="input" type="number">
-                        </div>
-                        <button class="button is-info" onclick="updateFlaskServer()">Update</button>
-                        <div id="flask-restart" style="display:none;" class="notification is-warning">
-                            <p>The port has been modified. Relaunch the app manually to apply changes.</p>
-                            <a id="new-url" class="button is-primary" target="_blank">And then, go to the new URL</a>
-                        </div>
+                    <div class="field">
+                        <label class="label">Port</label>
+                        <input id="osc_port" class="input" type="number">
+                    </div>
+                    <button class="button is-info" onclick="updateOSCServer()">Update</button>
+                </div>
+                <!-- TCP Server -->
+                <div class="box">
+                    <h3 class="title is-5">TCP server</h3>
+                    <div class="field">
+                        <label class="label">Port</label>
+                        <input id="tcp_port" class="input" type="number">
+                    </div>
+                    <button class="button is-info" onclick="updateTCPServer()">Update</button>
+                </div>
+                <!-- Flask Server -->
+                <div class="box">
+                    <h3 class="title is-5">Flask server</h3>
+                    <div class="field">
+                        <label class="label">Port</label>
+                        <input id="flask_port" class="input" type="number">
+                    </div>
+                    <button class="button is-info" onclick="updateFlaskServer()">Update</button>
+                    <div id="flask-restart" style="display:none;" class="notification is-warning">
+                        <p>The port has been modified. Relaunch the app manually to apply changes.</p>
+                        <a id="new-url" class="button is-primary" target="_blank">And then, go to the new URL</a>
                     </div>
                 </div>
+
                 <!-- Cogs Configuration -->
                 <div class="box">
                     <h3 class="title is-5">Target: Cogs</h3>
@@ -71,7 +80,9 @@
                         <label class="label">Port</label>
                         <input id="cogs_port" class="input" type="number" value="">
                     </div>
-                    <div class="notification is-danger">Warning: If you work in a virtual environment, setup the IP address here and not just "localhost" or it won't work.</div>
+                    <div class="notification is-danger">Warning: If you work in a virtual environment, setup the IP
+                        address
+                        here and not just "localhost" or it won't work.</div>
                     <button class="button is-info" onclick="updateCogsTarget()">Update</button>
                 </div>
             </div>
@@ -196,6 +207,7 @@
                 document.getElementById('osc_ip').value = config.osc_server.listen_ip;
                 document.getElementById('osc_port').value = config.osc_server.listen_port;
                 document.getElementById('flask_port').value = config.flask_server.port;
+                document.getElementById('tcp_port').value = config.routes.find(route => route.from.protocol === 'tcp')?.from.port || '';
                 fetchTargets();
                 fetchRoutes();
             });
@@ -231,6 +243,15 @@
                 document.getElementById('flask-restart').style.display = 'block';
                 document.getElementById('new-url').href = newUrl;
             });
+        }
+
+        function updateTCPServer() {
+            const port = document.getElementById('tcp_port').value;
+            fetch('/update_tcp_server', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ port })
+            }).then(() => alert("TCP server updated with success !"))
+            .catch(err => alert("Error : " + err));
         }
 
         function updateOSCServer() {

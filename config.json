@@ -24,6 +24,16 @@
             "to": {
                 "target_name": "cogs"
             }
+        },
+        {
+            "from": {
+                "protocol": "tcp",
+                "ip": "localhost",
+                "port": 9000
+            },
+            "to": {
+                "target_name": "cogs"
+            }
         }
     ]
 }

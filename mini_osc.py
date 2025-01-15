@@ -92,6 +92,16 @@ def update_flask_server():
     save_config(config)
     return jsonify({"status": "success"})
 
+@app.route('/update_tcp_server', methods=['POST'])
+def update_tcp_server():
+    data = request.json
+    config = load_config(CONFIG_FILE)
+    for route in config['routes'] :
+        if route['from']['protocol'] == "tcp":
+            route['from']['port'] = int(data['port'])
+    save_config(config)
+    return jsonify({"status": "success"})
+
 @app.route('/add_target', methods=['POST'])
 def add_target():
     data = request.json
@@ -286,6 +296,7 @@ def handle_osc_out(target_name, address, args):
     ip = target["ip"]
     port = target["port"]
     print(f"Sending OSC : {ip}:{port} adresse {address} args {args}")
+
     send_osc_message(ip, port, address, args)
 
 ########################################
@@ -328,11 +339,8 @@ def handle_incoming_non_osc(protocol, data, route_filter):
                 # Compare l'endpoint
                 if route["from"]["endpoint"] == route_filter["endpoint"]:
                     match = True
-            elif protocol == "tcp":
-                # Compare ip/port
-                if route["from"]["ip"] == route_filter["ip"] and route["from"]["port"] == route_filter["port"]:
-                    match = True
-            elif protocol == "udp":
+            elif protocol in ["tcp", "udp"]:
+                # Compare IP/port
                 if route["from"]["ip"] == route_filter["ip"] and route["from"]["port"] == route_filter["port"]:
                     match = True
 
@@ -347,7 +355,17 @@ def handle_incoming_non_osc(protocol, data, route_filter):
                     print("Error: No OSC address provided")
                     return
 
-                args = data.get("args", [])
+                if protocol == "http":
+                    args = data.get("args", [])
+                elif protocol in ["tcp", "udp"]:
+                    args = []
+                    for key, value in data.items():
+                        if key != "address":
+                            if isinstance(value, list):
+                                args.extend(value)  # Ajoute les éléments de la sous-liste
+                            else:
+                                args.append(value)
+
                 handle_osc_out(target_name, address, args)
                 return
 
