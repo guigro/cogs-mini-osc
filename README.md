@@ -2,7 +2,7 @@
 # Mini-OSC for Cogs
 
 This mini-app is made to help Cogs receiving and sending HTTP / TCP / UDP requests through OSC by running a mini-OSC server handling and converting requests.
-It's a work in progress, so far I tested with success HTTP requests, but not TCP and UDP yet.
+It's a work in progress, so far I tested with success HTTP requests and TCP requests.
 This project has been made with the help of AI with a lot of manual adjustments to make it work.
 
 ---
@@ -150,6 +150,8 @@ curl -X POST -H "Content-Type: application/json" -d '{"address": "/level_down", 
 
 curl -X POST -H "Content-Type: application/json" -d '{"address": "/level", "args":[42]}' http://localhost:5009/send_osc 
 
+
+For TCP, send any request with the argument "address" and any other list of arguments, they will all collapse in a single "args" list.
 ---
 
 ## Next steps
