@@ -1,10 +1,10 @@
 {
     "osc_server": {
-        "listen_ip": "localhost",
+        "listen_ip": "192.168.50.248",
         "listen_port": 53000
     },
     "flask_server": {
-        "ip": "localhost",
+        "ip": "192.168.50.248",
         "port": 5009
     },
     "targets": [
@@ -13,6 +13,13 @@
             "type": "osc",
             "ip": "192.168.50.248",
             "port": 12097
+        },
+        {
+            "name": "Quiz1",
+            "type": "tcp",
+            "ip": "192.168.50.232",
+            "port": 5000,
+            "url": ""
         }
     ],
     "routes": [
@@ -28,11 +35,26 @@
         {
             "from": {
                 "protocol": "tcp",
-                "ip": "localhost",
-                "port": 9000
+                "ip": "192.168.50.248",
+                "port": 57676
             },
             "to": {
                 "target_name": "cogs"
+            }
+        },
+        {
+            "from": {
+                "protocol": "osc",
+                "address_pattern": "/quiz1",
+                "values": [
+                    "GameID",
+                    "Level1",
+                    "Level2",
+                    "Level3"
+                ]
+            },
+            "to": {
+                "target_name": "Quiz1"
             }
         }
     ]

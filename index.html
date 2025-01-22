@@ -27,6 +27,7 @@
             <!-- Serveurs Configuration (OSC + Flask) -->
             <div id="content-servers" class="box">
                 <h2 class="title is-4">Servers parameters</h2>
+                <div class="notification is-danger">For general purpose and to avoid headaches, I recommend to put local IP adresses instead of "localhost"</div>
                 <div id="server-summary" class="notification is-info"></div>
                 <!-- Display local IP -->
                 <div id="local-ip" class="notification is-primary">
@@ -50,6 +51,10 @@
                 <div class="box">
                     <h3 class="title is-5">TCP server</h3>
                     <div class="field">
+                        <label class="label">IP Address</label>
+                        <input id="tcp_ip" class="input" type="text" placeholder="192.168.0.150">
+                    </div>
+                    <div class="field">
                         <label class="label">Port</label>
                         <input id="tcp_port" class="input" type="number">
                     </div>
@@ -58,6 +63,10 @@
                 <!-- Flask Server -->
                 <div class="box">
                     <h3 class="title is-5">Flask server</h3>
+                    <div class="field">
+                        <label class="label">IP Address</label>
+                        <input id="flask_ip" class="input" type="text" placeholder="192.168.0.150">
+                    </div>
                     <div class="field">
                         <label class="label">Port</label>
                         <input id="flask_port" class="input" type="number">
@@ -193,6 +202,7 @@
             <div id="content-logs" class="box is-hidden">
                 <h2 class="title is-4">Live logs</h2>
                 <pre id="logs" class="content">Loading logs...</pre>
+                <button class="button is-danger" onclick="clearLogs()">Clear Logs</button>
             </div>
         </div>
     </section>
@@ -206,7 +216,9 @@
                     `OSC: ${config.osc_server.listen_ip}:${config.osc_server.listen_port} | Flask: ${config.flask_server.port}`;
                 document.getElementById('osc_ip').value = config.osc_server.listen_ip;
                 document.getElementById('osc_port').value = config.osc_server.listen_port;
+                document.getElementById('flask_ip').value = config.flask_server.ip;
                 document.getElementById('flask_port').value = config.flask_server.port;
+                document.getElementById('tcp_ip').value = config.routes.find(route => route.from.protocol === 'tcp')?.from.ip || '';
                 document.getElementById('tcp_port').value = config.routes.find(route => route.from.protocol === 'tcp')?.from.port || '';
                 fetchTargets();
                 fetchRoutes();
@@ -234,24 +246,26 @@
         }
 
         function updateFlaskServer() {
+            const ip = document.getElementById('flask_ip').value;
             const port = document.getElementById('flask_port').value;
             fetch('/update_flask_server', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ port })
+                body: JSON.stringify({ ip, port })
             }).then(() => {
-                const newUrl = `http://127.0.0.1:${port}`;
+                const newUrl = `http://${ip}:${port}`;
                 document.getElementById('flask-restart').style.display = 'block';
                 document.getElementById('new-url').href = newUrl;
             });
         }
 
         function updateTCPServer() {
+            const ip = document.getElementById('tcp_ip').value;
             const port = document.getElementById('tcp_port').value;
             fetch('/update_tcp_server', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ port })
+                body: JSON.stringify({ ip, port })
             }).then(() => alert("TCP server updated with success !"))
-            .catch(err => alert("Error : " + err));
+                .catch(err => alert("Error : " + err));
         }
 
         function updateOSCServer() {
@@ -355,7 +369,12 @@
             <div class="field">
                 <label class="label">Address Pattern</label>
                 <input id="from_address_pattern" class="input" type="text" placeholder="/pattern">
+            </div>
+            <div class="field">
+                    <label class="label">Values (comma separated)</label>
+                    <input id="from_values" class="input" type="text" placeholder="GameID,Level1,Level2">
             </div>`;
+            
             } else if (protocol === 'http') {
                 fromFields.innerHTML = `
             <div class="field">
@@ -388,7 +407,16 @@
 
             let fromConfig = {};
             if (protocol === 'osc') {
-                fromConfig = { protocol: 'osc', address_pattern: document.getElementById('from_address_pattern').value };
+                const addressPattern = document.getElementById('from_address_pattern').value;
+                fromConfig = { protocol: 'osc', address_pattern: addressPattern };
+
+                // Récupérer from_values
+                const valuesString = document.getElementById('from_values').value.trim();
+                if (valuesString) {
+                    // On split sur la virgule et on trim chaque élément
+                    const valuesArray = valuesString.split(',').map(v => v.trim());
+                    fromConfig.values = valuesArray;
+                }
             } else if (protocol === 'http') {
                 fromConfig = { protocol: 'http', endpoint: document.getElementById('from_endpoint').value };
             } else if (protocol === 'tcp' || protocol === 'udp') {
@@ -469,10 +497,11 @@
             toFields.innerHTML = '';
 
             if (selectedType === 'osc') {
-                toFields.innerHTML = `<div class="field">
-            <label class="label">OSC address</label>
-            <input id="to_address" class="input" type="text" placeholder="/pattern">
-        </div>`;
+                toFields.innerHTML = `
+                <div class="field">
+                    <label class="label">OSC address</label>
+                    <input id="to_address" class="input" type="text" placeholder="/pattern">
+                </div>`;
             }
         }
 
@@ -492,6 +521,15 @@
                 routes.forEach((r, i) => {
                     let toAddress = '';
 
+                    // Récupère le pattern
+                    let patternCell = r.from.address_pattern || r.from.endpoint || '';
+
+                    // S'il y a un tableau de values, on l'ajoute
+                    if (r.from.values && Array.isArray(r.from.values)) {
+                        patternCell += ` [${r.from.values.join(', ')}]`;
+                    }
+
+
                     // Trouve la cible correspondante dans la liste des cibles pour obtenir son type
                     const target = targets.find(t => t.name === r.to.target_name);
                     if (target && target.type === 'osc' && r.to.address) {
@@ -500,7 +538,7 @@
 
                     table.innerHTML += `<tr>
                 <td>${r.from.protocol}</td>
-                <td>${r.from.address_pattern || r.from.endpoint || ''}</td>
+                <td>${patternCell}</td>
                 <td>${r.to.target_name}</td>
                 <td>
                     ${r.to.target_name !== 'cogs'
@@ -541,6 +579,27 @@
         // Rafraîchir les logs toutes les 2 secondes
         setInterval(fetchLogs, 2000);
 
+        // Clear Logs
+        function clearLogs() {
+            fetch('/clear_logs', {
+                method: 'POST'
+            })
+                .then(res => {
+                    if (!res.ok) {
+                        throw new Error("HTTP error " + res.status);
+                    }
+                    return res.json();
+                })
+                .then(data => {
+                    if (data.status === "success") {
+                        // On vide le <pre> côté client
+                        document.getElementById('logs').innerHTML = '';
+                    } else {
+                        alert("Error clearing logs on server!");
+                    }
+                })
+                .catch(err => alert("Error clearing logs : " + err));
+        }
 
         // Fetch local IP
         function fetchLocalIP() {

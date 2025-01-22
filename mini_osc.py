@@ -88,6 +88,7 @@ def update_osc_server():
 def update_flask_server():
     data = request.json
     config = load_config(CONFIG_FILE)
+    config['flask_server']['ip'] = data['ip']
     config['flask_server']['port'] = int(data['port'])
     save_config(config)
     return jsonify({"status": "success"})
@@ -98,6 +99,7 @@ def update_tcp_server():
     config = load_config(CONFIG_FILE)
     for route in config['routes'] :
         if route['from']['protocol'] == "tcp":
+            route['from']['ip'] = data['ip']
             route['from']['port'] = int(data['port'])
     save_config(config)
     return jsonify({"status": "success"})
@@ -154,6 +156,12 @@ def remove_route():
 @app.route('/get_logs', methods=['GET'])
 def get_logs():
     return jsonify(logs)
+
+@app.route('/clear_logs', methods=['POST'])
+def clear_logs():
+    global logs
+    logs = []
+    return jsonify({"status": "success"})
 
 # API to get local IP
 @app.route('/get_local_ip', methods=['GET'])
@@ -238,20 +246,36 @@ def send_to_http(target, address, args):
         add_log(f"[HTTP] Error sending to {url}: {e}")
 
 def send_to_tcp(target, address, args):
+    # print("[DEBUG] (send_to_tcp) args reçu =", args)
+    # add_log(f"[DEBUG] (send_to_tcp) args reçu = {args}")
+
     ip = target["ip"]
     port = target["port"]
-    payload = {
-        "address": address,
-        "args": args
-    }
+
+    # S'il s'agit d'un dict (issu de "values"), on l'envoie tel quel.
+    # Sinon, on garde le comportement existant (wrapper).
+    if isinstance(args, dict):
+        # On envoie le dictionnaire brut, SANS "address" ni "args"
+        payload = args
+    else:
+        # Ancien fonctionnement (liste ou autre)
+        payload = {
+            "address": address,
+            "args": args
+        }
+
+
+    # print("[DEBUG] send_to_tcp payload =", payload)
+    # add_log(f"[DEBUG] send_to_tcp payload = {payload}")
+    
     data = json.dumps(payload).encode("utf-8")
     
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((ip, port))
             s.sendall(data)
-        print(f"[TCP] Send to {ip}:{port} OK")
-        add_log(f"[TCP] Send to {ip}:{port} OK")
+        print(f"[TCP] Send to {ip}:{port} OK with : {payload}")
+        add_log(f"[TCP] Send to {ip}:{port} OK with : {payload}")
     except Exception as e:
         print(f"[TCP] Error sending to {ip}:{port}: {e}")
         add_log(f"[TCP] Error sending to {ip}:{port}: {e}")
@@ -295,7 +319,7 @@ def handle_osc_out(target_name, address, args):
 
     ip = target["ip"]
     port = target["port"]
-    print(f"Sending OSC : {ip}:{port} adresse {address} args {args}")
+    print(f"Sending OSC : {ip}:{port} adress {address} args {args}")
 
     send_osc_message(ip, port, address, args)
 
@@ -304,10 +328,17 @@ def handle_osc_out(target_name, address, args):
 ########################################
 
 def handle_osc_in_message(address, args):
+    # print(f"[DEBUG] handle_osc_in_message called with address={address}, args={args}")
+    # add_log(f"[DEBUG] handle_osc_in_message called with address={address}, args={args}")
+
     # On parcourt les routes pour voir si on a une route OSC->X
     for route in routes:
         if route["from"]["protocol"] == "osc":
+            # print(f"[DEBUG] Checking route with address_pattern={route['from']['address_pattern']}")
+            # add_log(f"[DEBUG] Checking route with address_pattern={route['from']['address_pattern']}")
+            
             if route["from"]["address_pattern"] == address:
+                # print(f"[DEBUG] This route is matched => {route}")
                 target_name = route["to"]["target_name"]
                 # Type de target ?
                 target = targets_dict.get(target_name)
@@ -315,14 +346,43 @@ def handle_osc_in_message(address, args):
                     print(f"Target {target_name} can't be found")
                     add_log(f"Target {target_name} can't be found")
                     return
+                
+
+                # ----------------------------------------------------------------
+                # Étape : gestion du mapping args -> dictionnaire selon 'values'
+                # ----------------------------------------------------------------
+                from_cfg = route["from"]  # On se raccourcit l'écriture
+                if "values" in from_cfg:
+                    # print(f"[DEBUG] 'values' found => {route['from']['values']}")
+                    # On a un tableau de keys, comme ["GameID", "Level1", "Level2", "Level3"]
+                    # On construit un dictionnaire : { "GameID": args[0], "Level1": args[1], ... }
+                    mapped_args = {}
+                    for i, key_name in enumerate(from_cfg["values"]):
+                        # Pour éviter les erreurs si le message n'a pas assez d'arguments
+                        # on vérifie si i < len(args)
+                        if i < len(args):
+                            mapped_args[key_name] = args[i]
+                        else:
+                            mapped_args[key_name] = None
+                    # C'est ce dictionnaire qu'on enverra
+                    final_args = mapped_args
+                else:
+                    # print("[DEBUG] No 'values' in this route")
+                    # Pas de 'values' => on garde la liste d'arguments comme avant
+                    final_args = args
+                # ----------------------------------------------------------------
+
+
                 ttype = target["type"]
                 if ttype == "http":
-                    send_to_http(target, address, args)
+                    send_to_http(target, address, final_args)
                     add_log("Send request to HTTP")
                 elif ttype == "tcp":
-                    send_to_tcp(target, address, args)
+                    # print("[DEBUG] (handle_osc_in_message) final_args avant send_to_tcp =", final_args)
+                    # add_log(f"[DEBUG] (handle_osc_in_message) final_args avant send_to_tcp = {final_args}")
+                    send_to_tcp(target, address, final_args)
                 elif ttype == "udp":
-                    send_to_udp(target, address, args)
+                    send_to_udp(target, address, final_args)
                 else:
                     print(f"Type de cible inconnu: {ttype}")
                 # Pour l'instant, on s’arrête après la première route matchée
@@ -350,7 +410,7 @@ def handle_incoming_non_osc(protocol, data, route_filter):
                 target_name = route["to"]["target_name"]
                 
                 # Priorise l'adresse depuis les données de la requête HTTP
-                address = data.get("address") or route["to"].get("address")
+                address = data.get("address") or route["to"].get("address") or data.get("osc_address")
                 if not address:
                     print("Error: No OSC address provided")
                     return
@@ -360,7 +420,7 @@ def handle_incoming_non_osc(protocol, data, route_filter):
                 elif protocol in ["tcp", "udp"]:
                     args = []
                     for key, value in data.items():
-                        if key != "address":
+                        if key not in ["osc_address", "address"]:
                             if isinstance(value, list):
                                 args.extend(value)  # Ajoute les éléments de la sous-liste
                             else:
