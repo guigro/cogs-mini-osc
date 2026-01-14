@@ -4,6 +4,7 @@
 This mini-app is made to help Cogs receiving and sending HTTP / TCP / UDP requests through OSC by running a mini-OSC server handling and converting requests.
 It's a work in progress, so far I tested with success HTTP requests and TCP requests.
 This project has been made with the help of AI with a lot of manual adjustments to make it work.
+I use this plugin to manage a lot of network devices in my action room https://eclipsium.fr
 
 ---
 
