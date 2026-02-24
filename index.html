@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 
 <head>
     <meta charset="UTF-8">
@@ -7,36 +7,703 @@
     <title>Mini OSC for Cogs</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/js/all.min.js"></script>
+    <style>
+        /* ========================================
+           CSS Custom Properties — Dark/Light Theme
+           ======================================== */
+        :root {
+            --bg-primary: #0f1117;
+            --bg-secondary: #161822;
+            --bg-card: #1a1d27;
+            --bg-card-nested: #222636;
+            --bg-input: #1e2130;
+            --bg-table-row-alt: #1e2130;
+            --bg-table-hover: #262a3a;
+            --text-primary: #e4e6f0;
+            --text-secondary: #8b8fa3;
+            --text-heading: #f0f1f5;
+            --border-color: #2a2e3d;
+            --border-input: #353a4f;
+            --border-input-focus: #6c5ce7;
+            --accent: #6c5ce7;
+            --accent-hover: #7c6ef0;
+            --color-osc: #6c5ce7;
+            --color-http: #0984e3;
+            --color-tcp: #00b894;
+            --color-udp: #fdcb6e;
+            --color-danger: #e74c3c;
+            --color-danger-hover: #c0392b;
+            --color-success: #00b894;
+            --color-success-hover: #00a381;
+            --color-info: #0984e3;
+            --color-info-hover: #0773c5;
+            --color-warning: #fdcb6e;
+            --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.3);
+            --shadow-glow: 0 0 20px rgba(108, 92, 231, 0.15);
+            --toast-bg: #2a2e3d;
+            --toast-text: #e4e6f0;
+            --log-bg: #0a0c10;
+            --log-text: #68d391;
+            --log-text-dim: #5a6078;
+            --tab-indicator: var(--accent);
+            --transition-speed: 0.25s;
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #f0f2f5;
+            --bg-secondary: #e8eaef;
+            --bg-card: #ffffff;
+            --bg-card-nested: #f7f8fa;
+            --bg-input: #ffffff;
+            --bg-table-row-alt: #f7f8fa;
+            --bg-table-hover: #eef0f4;
+            --text-primary: #2d3748;
+            --text-secondary: #718096;
+            --text-heading: #1a202c;
+            --border-color: #e2e8f0;
+            --border-input: #cbd5e0;
+            --border-input-focus: #6c5ce7;
+            --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.08);
+            --shadow-glow: 0 0 20px rgba(108, 92, 231, 0.1);
+            --toast-bg: #ffffff;
+            --toast-text: #2d3748;
+            --log-bg: #1a1d27;
+            --log-text: #68d391;
+            --log-text-dim: #a0aec0;
+        }
+
+        /* ========================================
+           Base Overrides
+           ======================================== */
+        html, body {
+            background-color: var(--bg-primary) !important;
+            color: var(--text-primary) !important;
+            transition: background-color var(--transition-speed), color var(--transition-speed);
+            min-height: 100vh;
+        }
+
+        .section {
+            background-color: var(--bg-primary);
+        }
+
+        /* ========================================
+           Header
+           ======================================== */
+        .app-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .app-header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .app-logo {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--color-osc), var(--color-http));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            color: #fff;
+            flex-shrink: 0;
+        }
+
+        .app-header .title {
+            color: var(--text-heading) !important;
+            margin-bottom: 0 !important;
+            font-size: 1.5rem !important;
+        }
+
+        .app-header .subtitle {
+            color: var(--text-secondary) !important;
+            margin-bottom: 0 !important;
+            font-size: 0.85rem !important;
+        }
+
+        .theme-toggle {
+            background: var(--bg-card-nested);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            transition: all var(--transition-speed);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--accent);
+            box-shadow: var(--shadow-glow);
+        }
+
+        /* ========================================
+           Tabs — Underline Style
+           ======================================== */
+        .tabs.custom-tabs {
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 1.5rem;
+        }
+
+        .tabs.custom-tabs ul {
+            border-bottom: none;
+            position: relative;
+        }
+
+        .tabs.custom-tabs li {
+            margin-bottom: -2px;
+        }
+
+        .tabs.custom-tabs li a {
+            color: var(--text-secondary);
+            border: none;
+            padding: 0.75rem 1.25rem;
+            font-weight: 500;
+            transition: color var(--transition-speed);
+            border-bottom: 2px solid transparent;
+        }
+
+        .tabs.custom-tabs li a:hover {
+            color: var(--text-primary);
+            background: transparent;
+            border-bottom-color: var(--border-color);
+        }
+
+        .tabs.custom-tabs li.is-active a {
+            color: var(--accent);
+            border-bottom: 2px solid var(--accent);
+            background: transparent;
+        }
+
+        /* ========================================
+           Cards / Box
+           ======================================== */
+        .box, .card-panel {
+            background-color: var(--bg-card) !important;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: var(--shadow-card);
+            color: var(--text-primary);
+            transition: background-color var(--transition-speed), border-color var(--transition-speed);
+        }
+
+        .box .box {
+            background-color: var(--bg-card-nested) !important;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+        }
+
+        .server-card {
+            position: relative;
+            border-left: 4px solid var(--accent) !important;
+        }
+
+        .server-card.osc-card {
+            border-left-color: var(--color-osc) !important;
+        }
+
+        .server-card.flask-card {
+            border-left-color: var(--color-http) !important;
+        }
+
+        /* ========================================
+           Titles
+           ======================================== */
+        .title, .subtitle {
+            color: var(--text-heading) !important;
+        }
+
+        .label {
+            color: var(--text-secondary) !important;
+            font-weight: 500 !important;
+            font-size: 0.85rem !important;
+        }
+
+        /* ========================================
+           Inputs & Selects
+           ======================================== */
+        .input, .textarea, .select select {
+            background-color: var(--bg-input) !important;
+            border: 1px solid var(--border-input) !important;
+            border-radius: 8px !important;
+            color: var(--text-primary) !important;
+            transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
+        }
+
+        .input::placeholder, .textarea::placeholder {
+            color: var(--text-secondary) !important;
+            opacity: 0.6;
+        }
+
+        .input:focus, .textarea:focus, .select select:focus {
+            border-color: var(--border-input-focus) !important;
+            box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.2) !important;
+        }
+
+        .select::after {
+            border-color: var(--text-secondary) !important;
+        }
+
+        /* ========================================
+           Notifications / Alerts
+           ======================================== */
+        .notification {
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+        }
+
+        .notification.is-info {
+            background-color: rgba(9, 132, 227, 0.12) !important;
+            color: var(--color-info) !important;
+            border-color: rgba(9, 132, 227, 0.3);
+        }
+
+        .notification.is-danger {
+            background-color: rgba(231, 76, 60, 0.12) !important;
+            color: var(--color-danger) !important;
+            border-color: rgba(231, 76, 60, 0.3);
+        }
+
+        .notification.is-primary {
+            background-color: rgba(108, 92, 231, 0.12) !important;
+            color: var(--accent) !important;
+            border-color: rgba(108, 92, 231, 0.3);
+        }
+
+        .notification.is-warning {
+            background-color: rgba(253, 203, 110, 0.12) !important;
+            color: var(--color-warning) !important;
+            border-color: rgba(253, 203, 110, 0.3);
+        }
+
+        /* ========================================
+           Protocol Tags
+           ======================================== */
+        .proto-tag {
+            display: inline-block;
+            padding: 0.15rem 0.55rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            vertical-align: middle;
+        }
+
+        .proto-tag-osc {
+            background-color: rgba(108, 92, 231, 0.18);
+            color: var(--color-osc);
+            border: 1px solid rgba(108, 92, 231, 0.35);
+        }
+
+        .proto-tag-http {
+            background-color: rgba(9, 132, 227, 0.18);
+            color: var(--color-http);
+            border: 1px solid rgba(9, 132, 227, 0.35);
+        }
+
+        .proto-tag-tcp {
+            background-color: rgba(0, 184, 148, 0.18);
+            color: var(--color-tcp);
+            border: 1px solid rgba(0, 184, 148, 0.35);
+        }
+
+        .proto-tag-udp {
+            background-color: rgba(253, 203, 110, 0.22);
+            color: #e0a800;
+            border: 1px solid rgba(253, 203, 110, 0.4);
+        }
+
+        [data-theme="light"] .proto-tag-udp {
+            color: #b8860b;
+        }
+
+        /* ========================================
+           Table
+           ======================================== */
+        .table {
+            background-color: transparent !important;
+            color: var(--text-primary) !important;
+        }
+
+        .table th {
+            color: var(--text-secondary) !important;
+            border-bottom: 2px solid var(--border-color) !important;
+            background-color: transparent !important;
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .table td {
+            border-bottom: 1px solid var(--border-color) !important;
+            color: var(--text-primary) !important;
+            vertical-align: middle !important;
+            padding: 0.85rem 0.75rem !important;
+        }
+
+        .table tbody tr {
+            transition: background-color 0.15s;
+        }
+
+        .table tbody tr:nth-child(even) {
+            background-color: var(--bg-table-row-alt);
+        }
+
+        .table tbody tr:hover {
+            background-color: var(--bg-table-hover) !important;
+        }
+
+        .conn-arrow {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            margin: 0 0.3rem;
+        }
+
+        code {
+            background-color: var(--bg-card-nested) !important;
+            color: var(--accent) !important;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        /* ========================================
+           Buttons
+           ======================================== */
+        .button {
+            border-radius: 8px !important;
+            font-weight: 500 !important;
+            transition: all var(--transition-speed) !important;
+        }
+
+        .button.is-info {
+            background-color: var(--color-info) !important;
+            border-color: transparent !important;
+        }
+
+        .button.is-info:hover {
+            background-color: var(--color-info-hover) !important;
+        }
+
+        .button.is-danger {
+            background-color: var(--color-danger) !important;
+            border-color: transparent !important;
+        }
+
+        .button.is-danger:hover {
+            background-color: var(--color-danger-hover) !important;
+        }
+
+        .button.is-success {
+            background-color: var(--color-success) !important;
+            border-color: transparent !important;
+        }
+
+        .button.is-success:hover {
+            background-color: var(--color-success-hover) !important;
+        }
+
+        .button.is-primary {
+            background-color: var(--accent) !important;
+            border-color: transparent !important;
+        }
+
+        .button.is-primary:hover {
+            background-color: var(--accent-hover) !important;
+        }
+
+        .button.is-link {
+            background-color: transparent !important;
+            color: var(--accent) !important;
+            border: 1px solid var(--accent) !important;
+        }
+
+        .button.is-link:hover {
+            background-color: rgba(108, 92, 231, 0.1) !important;
+        }
+
+        /* Ghost/default button */
+        .button:not([class*="is-"]) {
+            background-color: var(--bg-card-nested) !important;
+            color: var(--text-primary) !important;
+            border: 1px solid var(--border-color) !important;
+        }
+
+        .button:not([class*="is-"]):hover {
+            border-color: var(--text-secondary) !important;
+        }
+
+        .btn-icon {
+            padding: 0.35rem 0.6rem !important;
+            font-size: 0.8rem !important;
+        }
+
+        /* ========================================
+           Connection Form — From/To divider
+           ======================================== */
+        .form-divider {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 0;
+        }
+
+        .form-divider-arrow {
+            font-size: 1.5rem;
+            color: var(--accent);
+            opacity: 0.7;
+        }
+
+        @media screen and (min-width: 769px) {
+            .form-divider {
+                display: none;
+            }
+        }
+
+        .form-section-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .form-section-title .title {
+            margin-bottom: 0 !important;
+        }
+
+        /* ========================================
+           Logs — Terminal Style
+           ======================================== */
+        .log-terminal {
+            background-color: var(--log-bg) !important;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1rem 1.25rem;
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            font-size: 0.82rem;
+            line-height: 1.6;
+            color: var(--log-text);
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .log-terminal::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .log-terminal::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .log-terminal::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .log-terminal p {
+            margin: 0;
+            padding: 0.15rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .log-terminal p:last-child {
+            border-bottom: none;
+        }
+
+        .log-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .log-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--color-success);
+            display: inline-block;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ========================================
+           Toast Notifications
+           ======================================== */
+        .toast-container {
+            position: fixed;
+            top: 1.25rem;
+            right: 1.25rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            pointer-events: none;
+        }
+
+        .toast {
+            background-color: var(--toast-bg);
+            color: var(--toast-text);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.85rem 1.25rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            pointer-events: auto;
+            animation: toast-in 0.3s ease-out;
+            max-width: 380px;
+        }
+
+        .toast.toast-success {
+            border-left: 4px solid var(--color-success);
+        }
+
+        .toast.toast-error {
+            border-left: 4px solid var(--color-danger);
+        }
+
+        .toast.toast-info {
+            border-left: 4px solid var(--color-info);
+        }
+
+        .toast.toast-warning {
+            border-left: 4px solid var(--color-warning);
+        }
+
+        .toast-icon {
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .toast.toast-out {
+            animation: toast-out 0.25s ease-in forwards;
+        }
+
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateX(40px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes toast-out {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(40px); }
+        }
+
+        /* ========================================
+           Misc
+           ======================================== */
+        .is-hidden {
+            display: none !important;
+        }
+
+        strong {
+            color: var(--text-heading);
+        }
+
+        .mt-4 {
+            margin-top: 1rem;
+        }
+
+        .mr-1 {
+            margin-right: 0.25rem;
+        }
+
+        .mb-1 {
+            margin-bottom: 0.25rem;
+        }
+
+        .mt-2 {
+            margin-top: 0.5rem;
+        }
+
+        /* ========================================
+           Responsive
+           ======================================== */
+        @media screen and (max-width: 768px) {
+            .app-header {
+                flex-wrap: wrap;
+                gap: 0.75rem;
+            }
+
+            .table td, .table th {
+                font-size: 0.85rem;
+                padding: 0.6rem 0.5rem !important;
+            }
+
+            .toast {
+                max-width: calc(100vw - 2.5rem);
+            }
+        }
+    </style>
 </head>
 
 <body>
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
     <section class="section">
         <div class="container">
-            <h1 class="title">Mini OSC for Cogs</h1>
-            <p class="subtitle">Manage targets and routes for network requests in Cogs !</p>
+            <!-- Header -->
+            <div class="app-header">
+                <div class="app-header-left">
+                    <div class="app-logo">
+                        <i class="fas fa-wave-square"></i>
+                    </div>
+                    <div>
+                        <h1 class="title">Mini OSC for Cogs</h1>
+                        <p class="subtitle">Manage connections for network requests in Cogs</p>
+                    </div>
+                </div>
+                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">
+                    <i id="theme-icon" class="fas fa-moon"></i>
+                    <span id="theme-label" style="font-size:0.8rem;">Dark</span>
+                </button>
+            </div>
 
-            <div class="tabs is-boxed">
+            <!-- Tabs -->
+            <div class="tabs custom-tabs">
                 <ul>
-                    <li class="is-active" id="tab-servers" onclick="showTab('servers')"><a>Servers config</a></li>
-                    <li id="tab-targets" onclick="showTab('targets')"><a>Targets</a></li>
-                    <li id="tab-routes" onclick="showTab('routes')"><a>Routes</a></li>
-                    <li id="tab-logs" onclick="showTab('logs')"><a>Logs</a></li>
+                    <li class="is-active" id="tab-servers" onclick="showTab('servers')"><a><i class="fas fa-server" style="margin-right:0.4rem;"></i>Servers</a></li>
+                    <li id="tab-connections" onclick="showTab('connections')"><a><i class="fas fa-exchange-alt" style="margin-right:0.4rem;"></i>Connections</a></li>
+                    <li id="tab-logs" onclick="showTab('logs')"><a><i class="fas fa-terminal" style="margin-right:0.4rem;"></i>Logs</a></li>
                 </ul>
             </div>
 
-            <!-- Serveurs Configuration (OSC + Flask) -->
+            <!-- Servers Configuration -->
             <div id="content-servers" class="box">
                 <h2 class="title is-4">Servers parameters</h2>
-                <div class="notification is-danger">For general purpose and to avoid headaches, I recommend to put local IP adresses instead of "localhost"</div>
+                <div class="notification is-danger"><i class="fas fa-exclamation-triangle" style="margin-right:0.5rem;"></i>For general purpose and to avoid headaches, I recommend to put local IP addresses instead of "localhost"</div>
                 <div id="server-summary" class="notification is-info"></div>
                 <!-- Display local IP -->
                 <div id="local-ip" class="notification is-primary">
-                    Local Server IP: <span id="local-ip-value"></span>
+                    <i class="fas fa-network-wired" style="margin-right:0.5rem;"></i>Local Server IP: <strong><span id="local-ip-value"></span></strong>
                 </div>
 
                 <!-- OSC Server -->
-                <div class="box">
-                    <h3 class="title is-5">OSC server</h3>
+                <div class="box server-card osc-card">
+                    <h3 class="title is-5"><span class="proto-tag proto-tag-osc" style="margin-right:0.5rem;">OSC</span> Server</h3>
                     <div class="field">
                         <label class="label">IP Address</label>
                         <input id="osc_ip" class="input" type="text">
@@ -45,24 +712,11 @@
                         <label class="label">Port</label>
                         <input id="osc_port" class="input" type="number">
                     </div>
-                    <button class="button is-info" onclick="updateOSCServer()">Update</button>
-                </div>
-                <!-- TCP Server -->
-                <div class="box">
-                    <h3 class="title is-5">TCP server</h3>
-                    <div class="field">
-                        <label class="label">IP Address</label>
-                        <input id="tcp_ip" class="input" type="text" placeholder="192.168.0.150">
-                    </div>
-                    <div class="field">
-                        <label class="label">Port</label>
-                        <input id="tcp_port" class="input" type="number">
-                    </div>
-                    <button class="button is-info" onclick="updateTCPServer()">Update</button>
+                    <button class="button is-primary" onclick="updateOSCServer()"><i class="fas fa-save" style="margin-right:0.4rem;"></i>Update</button>
                 </div>
                 <!-- Flask Server -->
-                <div class="box">
-                    <h3 class="title is-5">Flask server</h3>
+                <div class="box server-card flask-card">
+                    <h3 class="title is-5"><span class="proto-tag proto-tag-http" style="margin-right:0.5rem;">HTTP</span> Flask Server</h3>
                     <div class="field">
                         <label class="label">IP Address</label>
                         <input id="flask_ip" class="input" type="text" placeholder="192.168.0.150">
@@ -71,162 +725,176 @@
                         <label class="label">Port</label>
                         <input id="flask_port" class="input" type="number">
                     </div>
-                    <button class="button is-info" onclick="updateFlaskServer()">Update</button>
-                    <div id="flask-restart" style="display:none;" class="notification is-warning">
+                    <button class="button is-primary" onclick="updateFlaskServer()"><i class="fas fa-save" style="margin-right:0.4rem;"></i>Update</button>
+                    <div id="flask-restart" style="display:none;" class="notification is-warning mt-4">
                         <p>The port has been modified. Relaunch the app manually to apply changes.</p>
-                        <a id="new-url" class="button is-primary" target="_blank">And then, go to the new URL</a>
+                        <a id="new-url" class="button is-primary mt-2" target="_blank">Go to the new URL</a>
                     </div>
-                </div>
-
-                <!-- Cogs Configuration -->
-                <div class="box">
-                    <h3 class="title is-5">Target: Cogs</h3>
-                    <div class="field">
-                        <label class="label">IP Address</label>
-                        <input id="cogs_ip" class="input" type="text" value="">
-                    </div>
-                    <div class="field">
-                        <label class="label">Port</label>
-                        <input id="cogs_port" class="input" type="number" value="">
-                    </div>
-                    <div class="notification is-danger">Warning: If you work in a virtual environment, setup the IP
-                        address
-                        here and not just "localhost" or it won't work.</div>
-                    <button class="button is-info" onclick="updateCogsTarget()">Update</button>
                 </div>
             </div>
 
-            <!-- Targets Management -->
-            <div id="content-targets" class="box is-hidden">
-                <h2 class="title is-4">Targets</h2>
+            <!-- Connections Management -->
+            <div id="content-connections" class="box is-hidden">
+                <h2 class="title is-4">Connections</h2>
                 <table class="table is-fullwidth">
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Type</th>
-                            <th>Details</th>
+                            <th>Source</th>
+                            <th></th>
+                            <th>Destination</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="targets-list"></tbody>
+                    <tbody id="connections-list"></tbody>
                 </table>
-                <button class="button is-success" onclick="showAddTargetForm()">Add Target</button>
-                <div id="add-target-form" style="display:none;">
+                <button class="button is-success" onclick="openConnectionForm()"><i class="fas fa-plus" style="margin-right:0.4rem;"></i>Add Connection</button>
+                <div id="add-connection-form" style="display:none;" class="box mt-4">
+                    <h3 id="form-title" class="title is-5">Add Connection</h3>
+                    <!-- Connection name -->
                     <div class="field">
-                        <label class="label">Name</label>
-                        <input id="target_name" class="input" type="text">
+                        <label class="label">Name (optional)</label>
+                        <input id="conn_name" class="input" type="text" placeholder="Auto-generated if empty">
                     </div>
-                    <div class="field">
-                        <label class="label">Type</label>
-                        <div class="select">
-                            <select id="target_type" onchange="updateTargetFormFields()">
-                                <option value="">-- Select a protocol --</option>
-                                <option value="http">HTTP</option>
-                                <option value="tcp">TCP</option>
-                                <option value="udp">UDP</option>
-                            </select>
-                        </div>
-                    </div>
-                    <!-- Champs dynamiques -->
-                    <div id="address-port-fields" style="display:none;">
-                        <div class="field">
-                            <label class="label">Address</label>
-                            <input id="target_address" class="input" type="text" placeholder="0.0.0.0">
-                        </div>
-                        <div class="field">
-                            <label class="label">Port</label>
-                            <input id="target_port" class="input" type="number" placeholder="5001">
-                        </div>
-                    </div>
-                    <div id="url-fields" style="display:none;">
-                        <div class="field">
-                            <label class="label">URL</label>
-                            <input id="target_url" class="input" type="text" placeholder="https://example.com">
-                        </div>
-                    </div>
-                    <button class="button is-primary" onclick="addTarget()">Add</button>
-                </div>
-            </div>
 
-            <!-- Routes Management -->
-            <div id="content-routes" class="box is-hidden">
-                <h2 class="title is-4">Routes</h2>
-                <table class="table is-fullwidth">
-                    <thead>
-                        <tr>
-                            <th>Protocol</th>
-                            <th>Endpoint (or Address)</th>
-                            <th>Target</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="routes-list"></tbody>
-                </table>
-                <button class="button is-success" onclick="showAddRouteForm()">Add Route</button>
-                <div id="add-route-form" style="display:none;">
-                    <div class="field">
-                        <label class="label">Source Protocol (From)</label>
-                        <div class="select">
-                            <select id="route_from" onchange="updateRouteFromFields()">
-                                <option value="">-- Select a protocol --</option>
-                                <option value="osc">OSC</option>
-                                <option value="http">HTTP</option>
-                                <option value="tcp">TCP</option>
-                                <option value="udp">UDP</option>
-                            </select>
+                    <div class="columns">
+                        <!-- FROM section -->
+                        <div class="column">
+                            <div class="form-section-title">
+                                <h4 class="title is-5">Source (From)</h4>
+                            </div>
+                            <div class="field">
+                                <label class="label">Name (optional)</label>
+                                <input id="conn_from_name" class="input" type="text" placeholder="e.g. Main HTTP">
+                            </div>
+                            <div class="field">
+                                <label class="label">Protocol</label>
+                                <div class="select is-fullwidth">
+                                    <select id="conn_from_protocol" onchange="updateFromFields()">
+                                        <option value="">-- Select --</option>
+                                        <option value="osc">OSC</option>
+                                        <option value="http">HTTP</option>
+                                        <option value="tcp">TCP</option>
+                                        <option value="udp">UDP</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="from-fields"></div>
+                        </div>
+
+                        <!-- Arrow divider (mobile) -->
+                        <div class="form-divider">
+                            <span class="form-divider-arrow"><i class="fas fa-arrow-down"></i></span>
+                        </div>
+
+                        <!-- TO section -->
+                        <div class="column">
+                            <div class="form-section-title">
+                                <h4 class="title is-5">Destination (To)</h4>
+                            </div>
+                            <div class="field">
+                                <label class="label">Name (optional)</label>
+                                <input id="conn_to_name" class="input" type="text" placeholder="e.g. Cogs">
+                            </div>
+                            <div class="field">
+                                <label class="label">Protocol</label>
+                                <div class="select is-fullwidth">
+                                    <select id="conn_to_protocol" onchange="updateToFields()">
+                                        <option value="">-- Select --</option>
+                                        <option value="osc">OSC</option>
+                                        <option value="tcp">TCP</option>
+                                        <option value="udp">UDP</option>
+                                        <option value="http">HTTP</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="to-fields"></div>
                         </div>
                     </div>
-                    <div id="route-from-fields">
-                        <div class="field">
-                            <label class="label">Address Pattern</label>
-                            <input id="from_address_pattern" class="input" type="text" placeholder="/pattern">
-                        </div>
-                    </div> <!-- Champs dynamiques pour la source -->
 
-                    <div class="field">
-                        <label class="label">Target (To)</label>
-                        <div class="select">
-                            <select id="route_target" onchange="updateRouteToFields()">
-                                <!-- Les options seront chargées dynamiquement -->
-                            </select>
-                        </div>
+                    <div class="field is-grouped">
+                        <button class="button is-primary" id="form-submit-btn" onclick="submitConnection()">Add</button>
+                        <button class="button" onclick="closeConnectionForm()">Cancel</button>
                     </div>
-                    <div id="route-to-fields"></div>
-
-
-                    <button class="button is-primary" onclick="addRoute()">Add</button>
                 </div>
             </div>
 
             <!-- Logs -->
             <div id="content-logs" class="box is-hidden">
-                <h2 class="title is-4">Live logs</h2>
-                <pre id="logs" class="content">Loading logs...</pre>
-                <button class="button is-danger" onclick="clearLogs()">Clear Logs</button>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+                    <div class="log-header">
+                        <span class="log-dot"></span>
+                        <h2 class="title is-4" style="margin-bottom:0 !important;">Live logs</h2>
+                    </div>
+                    <button class="button is-danger btn-icon" onclick="clearLogs()" title="Clear logs"><i class="fas fa-trash-alt" style="margin-right:0.3rem;"></i>Clear</button>
+                </div>
+                <div id="logs" class="log-terminal">Loading logs...</div>
             </div>
         </div>
     </section>
 
     <script>
-        window.onload = fetchConfig;
-
-        function fetchConfig() {
-            fetch('/get_config').then(res => res.json()).then(config => {
-                document.getElementById('server-summary').innerHTML =
-                    `OSC: ${config.osc_server.listen_ip}:${config.osc_server.listen_port} | Flask: ${config.flask_server.port}`;
-                document.getElementById('osc_ip').value = config.osc_server.listen_ip;
-                document.getElementById('osc_port').value = config.osc_server.listen_port;
-                document.getElementById('flask_ip').value = config.flask_server.ip;
-                document.getElementById('flask_port').value = config.flask_server.port;
-                document.getElementById('tcp_ip').value = config.routes.find(route => route.from.protocol === 'tcp')?.from.ip || '';
-                document.getElementById('tcp_port').value = config.routes.find(route => route.from.protocol === 'tcp')?.from.port || '';
-                fetchTargets();
-                fetchRoutes();
-            });
+        // =====================
+        // Theme Toggle
+        // =====================
+        function initTheme() {
+            const saved = localStorage.getItem('mini-osc-theme');
+            const theme = saved || 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+            updateThemeUI(theme);
         }
 
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('mini-osc-theme', next);
+            updateThemeUI(next);
+        }
+
+        function updateThemeUI(theme) {
+            const icon = document.getElementById('theme-icon');
+            const label = document.getElementById('theme-label');
+            if (theme === 'dark') {
+                icon.className = 'fas fa-moon';
+                label.textContent = 'Dark';
+            } else {
+                icon.className = 'fas fa-sun';
+                label.textContent = 'Light';
+            }
+        }
+
+        initTheme();
+
+        // =====================
+        // Toast Notifications
+        // =====================
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+
+            const icons = {
+                success: 'fas fa-check-circle',
+                error: 'fas fa-times-circle',
+                info: 'fas fa-info-circle',
+                warning: 'fas fa-exclamation-circle'
+            };
+
+            toast.innerHTML = `<i class="toast-icon ${icons[type] || icons.info}"></i><span>${message}</span>`;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('toast-out');
+                setTimeout(() => toast.remove(), 250);
+            }, 3000);
+        }
+
+        // =====================
+        // Tab navigation
+        // =====================
         function showTab(tab) {
-            const tabs = ['servers', 'targets', 'routes', 'logs'];
+            const tabs = ['servers', 'connections', 'logs'];
             tabs.forEach(t => {
                 document.getElementById(`content-${t}`).classList.add('is-hidden');
                 document.getElementById(`tab-${t}`).classList.remove('is-active');
@@ -235,14 +903,33 @@
             document.getElementById(`tab-${tab}`).classList.add('is-active');
         }
 
-        function showAddTargetForm() {
-            const form = document.getElementById('add-target-form');
-            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        // =====================
+        // Config loading
+        // =====================
+        function fetchConfig() {
+            fetch('/get_config').then(res => res.json()).then(config => {
+                document.getElementById('server-summary').innerHTML =
+                    `<i class="fas fa-info-circle" style="margin-right:0.4rem;"></i>OSC: ${config.osc_server.listen_ip}:${config.osc_server.listen_port} | Flask: ${config.flask_server.port}`;
+                document.getElementById('osc_ip').value = config.osc_server.listen_ip;
+                document.getElementById('osc_port').value = config.osc_server.listen_port;
+                document.getElementById('flask_ip').value = config.flask_server.ip;
+                document.getElementById('flask_port').value = config.flask_server.port;
+                fetchConnections();
+            });
         }
 
-        function showAddRouteForm() {
-            const form = document.getElementById('add-route-form');
-            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        // =====================
+        // Server updates
+        // =====================
+        function updateOSCServer() {
+            const ip = document.getElementById('osc_ip').value;
+            const port = document.getElementById('osc_port').value;
+            fetch('/update_osc_server', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip, port })
+            }).then(() => showToast("OSC server updated successfully!", "success"))
+                .catch(err => showToast("Error: " + err, "error"));
         }
 
         function updateFlaskServer() {
@@ -258,386 +945,393 @@
             });
         }
 
-        function updateTCPServer() {
-            const ip = document.getElementById('tcp_ip').value;
-            const port = document.getElementById('tcp_port').value;
-            fetch('/update_tcp_server', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip, port })
-            }).then(() => alert("TCP server updated with success !"))
-                .catch(err => alert("Error : " + err));
+        // =====================
+        // Protocol tag helper
+        // =====================
+        function protoTag(protocol) {
+            const p = protocol.toLowerCase();
+            return `<span class="proto-tag proto-tag-${p}">${protocol.toUpperCase()}</span>`;
         }
 
-        function updateOSCServer() {
-            const ip = document.getElementById('osc_ip').value;
-            const port = document.getElementById('osc_port').value;
-            fetch('/update_osc_server', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip, port })
-            }).then(() => alert("OSC server updated with success !"))
-                .catch(err => alert("Error : " + err));
-        }
-
-        function updateTargetFormFields() {
-            const targetType = document.getElementById('target_type').value;
-
-            // Cacher tous les champs dynamiques
-            document.getElementById('address-port-fields').style.display = 'none';
-            document.getElementById('url-fields').style.display = 'none';
-
-            // Afficher les champs correspondants au type sélectionné
-            if (targetType === 'http') {
-                document.getElementById('url-fields').style.display = 'block';
-            } else if (targetType === 'osc' || targetType === 'tcp' || targetType === 'udp') {
-                document.getElementById('address-port-fields').style.display = 'block';
-            }
-        }
-
-
-        function addTarget() {
-            const name = document.getElementById('target_name').value;
-            const type = document.getElementById('target_type').value;
-
-            let targetConfig = { name, type };
-
-            if (type === 'http') {
-                targetConfig.url = document.getElementById('target_url').value;
-            } else if (type === 'osc' || type === 'tcp' || type === 'udp') {
-                targetConfig.address = document.getElementById('target_address').value;
-                targetConfig.port = document.getElementById('target_port').value;
-            }
-
-            fetch('/add_target', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(targetConfig)
-            }).then(() => {
-                fetchTargets();
-                document.getElementById('add-target-form').style.display = 'none';
-            }).catch(err => alert("Error: " + err));
-        }
-
-
-        function deleteTarget(index) {
-            fetch('/remove_target', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ index })
-            }).then(response => {
-                if (!response.ok) {
-                    throw new Error("Failed to delete the target !");
+        // =====================
+        // Connections
+        // =====================
+        function formatSource(from) {
+            const label = from.name ? `<strong>${from.name}</strong><br>` : '';
+            const tag = protoTag(from.protocol);
+            if (from.protocol === 'osc') {
+                let s = `${tag} <code>${from.address_pattern || ''}</code>`;
+                if (from.values && from.values.length > 0) {
+                    s += ` [${from.values.join(', ')}]`;
                 }
-                return response.json();
-            }).then(() => {
-                alert("The target has been deleted !");
-                fetchTargets(); // Recharge la liste des cibles
-            }).catch(err => {
-                alert("Error : " + err.message);
-            });
+                return label + s;
+            } else if (from.protocol === 'http') {
+                return label + `${tag} <code>${from.endpoint || ''}</code>`;
+            } else {
+                return label + `${tag} ${from.listen_ip || ''}:${from.listen_port || ''}`;
+            }
         }
 
-        function fetchTargets() {
+        function formatDestination(to) {
+            const label = to.name ? `<strong>${to.name}</strong><br>` : '';
+            const tag = protoTag(to.protocol);
+            if (to.protocol === 'http') {
+                return label + `${tag} <code>${to.url || ''}</code>`;
+            } else {
+                let s = `${tag} ${to.ip || ''}:${to.port || ''}`;
+                if (to.protocol === 'osc' && to.address) {
+                    s += ` <code>${to.address}</code>`;
+                }
+                return label + s;
+            }
+        }
+
+        // Store connections data for edit access
+        let connectionsCache = [];
+
+        function fetchConnections() {
             fetch('/get_config').then(res => res.json()).then(config => {
-                const targets = config.targets;
-                const table = document.getElementById('targets-list');
+                connectionsCache = config.connections || [];
+                const table = document.getElementById('connections-list');
                 table.innerHTML = '';
-                targets.forEach((t, i) => {
+                connectionsCache.forEach((c, i) => {
                     table.innerHTML += `<tr>
-                        <td>${t.name}</td>
-                        <td>${t.type}</td>
-                        <td>${t.ip || t.url || ''}:${t.port || ''}</td>
-                        <td>
-                    ${t.type !== 'osc'
-                            ? `<button class='button is-danger' onclick='deleteTarget(${i})'>Delete</button>`
-                            : ''
-                        }
-                </td>
+                        <td><strong>${c.name || ''}</strong></td>
+                        <td>${formatSource(c.from)}</td>
+                        <td class="conn-arrow"><i class="fas fa-long-arrow-alt-right"></i></td>
+                        <td>${formatDestination(c.to)}</td>
+                        <td style="white-space:nowrap;">
+                            <button class='button is-info is-small btn-icon mr-1' onclick='editConnection(${i})' title='Edit'><i class='fas fa-pen'></i></button>
+                            <button class='button is-danger is-small btn-icon' onclick='deleteConnection(${i})' title='Delete'><i class='fas fa-trash-alt'></i></button>
+                        </td>
                     </tr>`;
                 });
             });
         }
 
-
-        function updateRouteFromFields() {
-            const protocol = document.getElementById('route_from').value;
-            const fromFields = document.getElementById('route-from-fields');
-            fromFields.innerHTML = ''; // Réinitialise les champs dynamiques
-
-            if (protocol === 'osc') {
-                fromFields.innerHTML = `
-            <div class="field">
-                <label class="label">Address Pattern</label>
-                <input id="from_address_pattern" class="input" type="text" placeholder="/pattern">
-            </div>
-            <div class="field">
-                    <label class="label">Values (comma separated)</label>
-                    <input id="from_values" class="input" type="text" placeholder="GameID,Level1,Level2">
-            </div>`;
-            
-            } else if (protocol === 'http') {
-                fromFields.innerHTML = `
-            <div class="field">
-                <label class="label">Endpoint</label>
-                <input id="from_endpoint" class="input" type="text" placeholder="/endpoint">
-            </div>`;
-            } else if (protocol === 'tcp' || protocol === 'udp') {
-                fromFields.innerHTML = `
-            <div class="field">
-                <label class="label">IP</label>
-                <input id="from_ip" class="input" type="text" placeholder="0.0.0.0">
-            </div>
-            <div class="field">
-                <label class="label">Port</label>
-                <input id="from_port" class="input" type="number" placeholder="5001">
-            </div>`;
-            }
-        }
-
-
-        // Ajoute une route avec les champs dynamiques
-        function addRoute() {
-            const protocol = document.getElementById('route_from').value;
-            const targetName = document.getElementById('route_target').value;
-
-            // Récupérer le type de la cible sélectionnée
-            const targetSelect = document.getElementById('route_target');
-            const targetType = targetSelect.options[targetSelect.selectedIndex].dataset.type;
-
-
-            let fromConfig = {};
-            if (protocol === 'osc') {
-                const addressPattern = document.getElementById('from_address_pattern').value;
-                fromConfig = { protocol: 'osc', address_pattern: addressPattern };
-
-                // Récupérer from_values
-                const valuesString = document.getElementById('from_values').value.trim();
-                if (valuesString) {
-                    // On split sur la virgule et on trim chaque élément
-                    const valuesArray = valuesString.split(',').map(v => v.trim());
-                    fromConfig.values = valuesArray;
-                }
-            } else if (protocol === 'http') {
-                fromConfig = { protocol: 'http', endpoint: document.getElementById('from_endpoint').value };
-            } else if (protocol === 'tcp' || protocol === 'udp') {
-                fromConfig = {
-                    protocol: protocol,
-                    ip: document.getElementById('from_ip').value,
-                    port: document.getElementById('from_port').value
-                };
-            }
-
-            const toConfig = { target_name: targetName };
-
-            // Vérifier si la cible est de type OSC et inclure to_address
-            if (targetType === 'osc') {
-                const toAddressElement = document.getElementById('to_address');
-                if (toAddressElement) {
-                    toConfig.address = toAddressElement.value;
-                }
-            }
-            // Vérifier si la cible est de type HTTP et inclure to_url
-            else if (targetType === 'http') {
-                const toUrlElement = document.getElementById('to_url');
-                if (toUrlElement) {
-                    toConfig.url = toUrlElement.value;
-                }
-            }
-
-            const route = { from: fromConfig, to: toConfig };
-
-            fetch('/add_route', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(route)
-            }).then(() => {
-                alert("Route added with success !");
-                fetchRoutes();
-                document.getElementById('add-route-form').style.display = 'none';
-            }).catch(err => alert("Erreur : " + err));
-        }
-
-        function deleteRoute(index) {
-            fetch('/remove_route', {
+        function deleteConnection(index) {
+            if (!confirm("Delete this connection?")) return;
+            fetch('/remove_connection', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ index })
             }).then(response => {
-                if (!response.ok) {
-                    throw new Error("Failed to delete the route !");
-                }
+                if (!response.ok) throw new Error("Failed to delete connection");
                 return response.json();
             }).then(() => {
-                alert("The route has been deleted");
-                fetchTargets(); // Recharge la liste des cibles
-            }).catch(err => {
-                alert("Erreur : " + err.message);
-            });
+                showToast("Connection deleted", "success");
+                fetchConnections();
+            }).catch(err => showToast("Error: " + err.message, "error"));
         }
 
+        // =====================
+        // Connection form (Add / Edit)
+        // =====================
+        let editingIndex = null; // null = add mode, number = edit mode
 
-
-        function loadTargetsForRoutes() {
-            fetch('/get_config').then(res => res.json()).then(config => {
-                const targets = config.targets || [];
-                const targetSelect = document.getElementById('route_target');
-                targetSelect.innerHTML = '<option value="">-- Select a target --</option>';
-                targets.forEach(target => {
-                    if (target.name !== 'cogs') { // Vérifie que le nom de la cible n'est pas "cogs"
-                        targetSelect.innerHTML += `<option value="${target.name}" data-type="${target.type}">${target.name} (${target.type})</option>`;
-                    }
-                });
-            });
+        function openConnectionForm() {
+            editingIndex = null;
+            resetConnectionForm();
+            document.getElementById('form-title').textContent = 'Add Connection';
+            document.getElementById('form-submit-btn').textContent = 'Add';
+            document.getElementById('add-connection-form').style.display = 'block';
         }
 
-        function updateRouteToFields() {
-            const targetSelect = document.getElementById('route_target');
-            const selectedType = targetSelect.options[targetSelect.selectedIndex].dataset.type;
-            const toFields = document.getElementById('route-to-fields');
-            toFields.innerHTML = '';
+        function closeConnectionForm() {
+            document.getElementById('add-connection-form').style.display = 'none';
+            editingIndex = null;
+        }
 
-            if (selectedType === 'osc') {
-                toFields.innerHTML = `
-                <div class="field">
-                    <label class="label">OSC address</label>
-                    <input id="to_address" class="input" type="text" placeholder="/pattern">
-                </div>`;
+        function resetConnectionForm() {
+            document.getElementById('conn_name').value = '';
+            document.getElementById('conn_from_name').value = '';
+            document.getElementById('conn_from_protocol').value = '';
+            document.getElementById('from-fields').innerHTML = '';
+            document.getElementById('conn_to_name').value = '';
+            document.getElementById('conn_to_protocol').value = '';
+            document.getElementById('to-fields').innerHTML = '';
+        }
+
+        function editConnection(index) {
+            const conn = connectionsCache[index];
+            if (!conn) return;
+
+            editingIndex = index;
+            document.getElementById('form-title').textContent = 'Edit Connection';
+            document.getElementById('form-submit-btn').textContent = 'Save';
+
+            // Set names
+            document.getElementById('conn_name').value = conn.name || '';
+            document.getElementById('conn_from_name').value = conn.from.name || '';
+            document.getElementById('conn_to_name').value = conn.to.name || '';
+
+            // Set from protocol and generate fields
+            document.getElementById('conn_from_protocol').value = conn.from.protocol;
+            updateFromFields();
+
+            // Fill from fields
+            if (conn.from.protocol === 'osc') {
+                document.getElementById('from_address_pattern').value = conn.from.address_pattern || '';
+                if (conn.from.values && conn.from.values.length > 0) {
+                    conn.from.values.forEach(v => {
+                        addValueField(v);
+                    });
+                }
+            } else if (conn.from.protocol === 'http') {
+                document.getElementById('from_endpoint').value = conn.from.endpoint || '';
+            } else if (conn.from.protocol === 'tcp' || conn.from.protocol === 'udp') {
+                document.getElementById('from_listen_ip').value = conn.from.listen_ip || '';
+                document.getElementById('from_listen_port').value = conn.from.listen_port || '';
+            }
+
+            // Set to protocol and generate fields
+            document.getElementById('conn_to_protocol').value = conn.to.protocol;
+            updateToFields();
+
+            // Fill to fields
+            if (conn.to.protocol === 'osc') {
+                document.getElementById('to_ip').value = conn.to.ip || '';
+                document.getElementById('to_port').value = conn.to.port || '';
+                if (conn.to.address) {
+                    document.getElementById('to_address').value = conn.to.address;
+                }
+            } else if (conn.to.protocol === 'tcp' || conn.to.protocol === 'udp') {
+                document.getElementById('to_ip').value = conn.to.ip || '';
+                document.getElementById('to_port').value = conn.to.port || '';
+            } else if (conn.to.protocol === 'http') {
+                document.getElementById('to_url').value = conn.to.url || '';
+            }
+
+            document.getElementById('add-connection-form').style.display = 'block';
+        }
+
+        function updateFromFields() {
+            const protocol = document.getElementById('conn_from_protocol').value;
+            const container = document.getElementById('from-fields');
+            container.innerHTML = '';
+
+            if (protocol === 'osc') {
+                container.innerHTML = `
+                    <div class="field">
+                        <label class="label">Address Pattern</label>
+                        <input id="from_address_pattern" class="input" type="text" placeholder="/pattern">
+                    </div>
+                    <div class="field">
+                        <label class="label">Values</label>
+                        <div id="from-values-list"></div>
+                        <button class="button is-link is-small mt-2" type="button" onclick="addValueField()"><i class="fas fa-plus" style="margin-right:0.3rem;"></i>Add value</button>
+                    </div>`;
+            } else if (protocol === 'http') {
+                container.innerHTML = `
+                    <div class="field">
+                        <label class="label">Endpoint</label>
+                        <input id="from_endpoint" class="input" type="text" placeholder="/send_osc">
+                    </div>`;
+            } else if (protocol === 'tcp' || protocol === 'udp') {
+                container.innerHTML = `
+                    <div class="field">
+                        <label class="label">Listen IP</label>
+                        <input id="from_listen_ip" class="input" type="text" placeholder="192.168.0.1">
+                    </div>
+                    <div class="field">
+                        <label class="label">Listen Port</label>
+                        <input id="from_listen_port" class="input" type="number" placeholder="5001">
+                    </div>`;
             }
         }
 
-        function showAddRouteForm() {
-            const form = document.getElementById('add-route-form');
-            form.style.display = form.style.display === 'none' ? 'block' : 'none';
-            loadTargetsForRoutes(); // Charge les cibles existantes
+        function addValueField(prefill) {
+            const list = document.getElementById('from-values-list');
+            const div = document.createElement('div');
+            div.className = 'field has-addons mb-1';
+            div.innerHTML = `
+                <div class="control is-expanded">
+                    <input class="input value-input" type="text" placeholder="ValueName" value="${prefill || ''}">
+                </div>
+                <div class="control">
+                    <button class="button is-danger btn-icon" type="button" onclick="this.closest('.field').remove()">&#215;</button>
+                </div>`;
+            list.appendChild(div);
         }
 
-        function fetchRoutes() {
-            fetch('/get_config').then(res => res.json()).then(config => {
-                const routes = config.routes;
-                const targets = config.targets; // Nous utilisons les cibles pour récupérer leur type
-                const table = document.getElementById('routes-list');
-                table.innerHTML = '';
+        function updateToFields() {
+            const protocol = document.getElementById('conn_to_protocol').value;
+            const container = document.getElementById('to-fields');
+            container.innerHTML = '';
 
-                routes.forEach((r, i) => {
-                    let toAddress = '';
+            if (protocol === 'osc') {
+                container.innerHTML = `
+                    <div class="field">
+                        <label class="label">IP</label>
+                        <input id="to_ip" class="input" type="text" placeholder="192.168.0.1">
+                    </div>
+                    <div class="field">
+                        <label class="label">Port</label>
+                        <input id="to_port" class="input" type="number" placeholder="12097">
+                    </div>
+                    <div class="field">
+                        <label class="label">OSC Address (optional fallback)</label>
+                        <input id="to_address" class="input" type="text" placeholder="/address">
+                    </div>`;
+            } else if (protocol === 'tcp' || protocol === 'udp') {
+                container.innerHTML = `
+                    <div class="field">
+                        <label class="label">IP</label>
+                        <input id="to_ip" class="input" type="text" placeholder="192.168.0.1">
+                    </div>
+                    <div class="field">
+                        <label class="label">Port</label>
+                        <input id="to_port" class="input" type="number" placeholder="5000">
+                    </div>`;
+            } else if (protocol === 'http') {
+                container.innerHTML = `
+                    <div class="field">
+                        <label class="label">URL</label>
+                        <input id="to_url" class="input" type="text" placeholder="https://example.com/api">
+                    </div>`;
+            }
+        }
 
-                    // Récupère le pattern
-                    let patternCell = r.from.address_pattern || r.from.endpoint || '';
+        function buildConnectionFromForm() {
+            const fromProtocol = document.getElementById('conn_from_protocol').value;
+            const toProtocol = document.getElementById('conn_to_protocol').value;
 
-                    // S'il y a un tableau de values, on l'ajoute
-                    if (r.from.values && Array.isArray(r.from.values)) {
-                        patternCell += ` [${r.from.values.join(', ')}]`;
-                    }
+            if (!fromProtocol || !toProtocol) {
+                showToast("Please select both source and destination protocols.", "warning");
+                return null;
+            }
 
-
-                    // Trouve la cible correspondante dans la liste des cibles pour obtenir son type
-                    const target = targets.find(t => t.name === r.to.target_name);
-                    if (target && target.type === 'osc' && r.to.address) {
-                        toAddress = `<br><strong>Address:</strong> ${r.to.address}`;
-                    }
-
-                    table.innerHTML += `<tr>
-                <td>${r.from.protocol}</td>
-                <td>${patternCell}</td>
-                <td>${r.to.target_name}</td>
-                <td>
-                    ${r.to.target_name !== 'cogs'
-                            ? `<button class='button is-danger' onclick='deleteRoute(${i})'>Delete</button>`
-                            : ''
-                        }
-                </td>
-            </tr>`;
+            // Build from
+            let connFrom = { protocol: fromProtocol };
+            const fromName = document.getElementById('conn_from_name').value.trim();
+            if (fromName) connFrom.name = fromName;
+            if (fromProtocol === 'osc') {
+                connFrom.address_pattern = document.getElementById('from_address_pattern').value;
+                const valueInputs = document.querySelectorAll('#from-values-list .value-input');
+                const values = [];
+                valueInputs.forEach(input => {
+                    const v = input.value.trim();
+                    if (v) values.push(v);
                 });
-            }).catch(err => {
-                alert("Error while loading routes: " + err.message);
-            });
+                if (values.length > 0) connFrom.values = values;
+            } else if (fromProtocol === 'http') {
+                connFrom.endpoint = document.getElementById('from_endpoint').value;
+            } else {
+                connFrom.listen_ip = document.getElementById('from_listen_ip').value;
+                connFrom.listen_port = parseInt(document.getElementById('from_listen_port').value) || 0;
+            }
+
+            // Build to
+            let connTo = { protocol: toProtocol };
+            const toName = document.getElementById('conn_to_name').value.trim();
+            if (toName) connTo.name = toName;
+            if (toProtocol === 'osc') {
+                connTo.ip = document.getElementById('to_ip').value;
+                connTo.port = parseInt(document.getElementById('to_port').value) || 0;
+                const addr = document.getElementById('to_address').value;
+                if (addr) connTo.address = addr;
+            } else if (toProtocol === 'tcp' || toProtocol === 'udp') {
+                connTo.ip = document.getElementById('to_ip').value;
+                connTo.port = parseInt(document.getElementById('to_port').value) || 0;
+            } else if (toProtocol === 'http') {
+                connTo.url = document.getElementById('to_url').value;
+            }
+
+            // Auto-generate name if empty
+            let name = document.getElementById('conn_name').value.trim();
+            if (!name) {
+                name = `${fromProtocol.toUpperCase()} to ${toProtocol.toUpperCase()}`;
+            }
+
+            return { name, from: connFrom, to: connTo };
         }
 
+        function submitConnection() {
+            const conn = buildConnectionFromForm();
+            if (!conn) return;
+
+            let url, body;
+            if (editingIndex !== null) {
+                url = '/update_connection';
+                body = { index: editingIndex, ...conn };
+            } else {
+                url = '/add_connection';
+                body = conn;
+            }
+
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            }).then(res => {
+                if (!res.ok) throw new Error("Failed to save connection");
+                return res.json();
+            }).then(() => {
+                showToast(editingIndex !== null ? "Connection updated!" : "Connection added!", "success");
+                fetchConnections();
+                closeConnectionForm();
+            }).catch(err => showToast("Error: " + err.message, "error"));
+        }
+
+        // =====================
+        // Logs
+        // =====================
         function fetchLogs() {
             fetch('/get_logs')
                 .then(res => {
-                    if (!res.ok) {
-                        throw new Error(`HTTP error! Status: ${res.status}`);
-                    }
+                    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
                     return res.json();
                 })
                 .then(data => {
                     const logsElement = document.getElementById('logs');
-                    if (Array.isArray(data)) {
+                    if (Array.isArray(data) && data.length > 0) {
                         logsElement.innerHTML = data.map(log => `<p>${log}</p>`).join('');
+                        logsElement.scrollTop = logsElement.scrollHeight;
                     } else {
-                        logsElement.innerHTML = "<p>No log to display.</p>";
+                        logsElement.innerHTML = "<p style='color:var(--log-text-dim);'>No log to display.</p>";
                     }
                 })
                 .catch(err => {
-                    console.error("Error while fetching logs :", err);
-                    const logsElement = document.getElementById('logs');
-                    logsElement.innerHTML = `<p>Error : ${err.message}</p>`;
+                    console.error("Error while fetching logs:", err);
+                    document.getElementById('logs').innerHTML = `<p style="color:var(--color-danger);">Error: ${err.message}</p>`;
                 });
         }
 
-        // Rafraîchir les logs toutes les 2 secondes
         setInterval(fetchLogs, 2000);
 
-        // Clear Logs
         function clearLogs() {
-            fetch('/clear_logs', {
-                method: 'POST'
-            })
+            fetch('/clear_logs', { method: 'POST' })
                 .then(res => {
-                    if (!res.ok) {
-                        throw new Error("HTTP error " + res.status);
-                    }
+                    if (!res.ok) throw new Error("HTTP error " + res.status);
                     return res.json();
                 })
                 .then(data => {
                     if (data.status === "success") {
-                        // On vide le <pre> côté client
                         document.getElementById('logs').innerHTML = '';
+                        showToast("Logs cleared", "info");
                     } else {
-                        alert("Error clearing logs on server!");
+                        showToast("Error clearing logs on server!", "error");
                     }
                 })
-                .catch(err => alert("Error clearing logs : " + err));
+                .catch(err => showToast("Error clearing logs: " + err, "error"));
         }
 
-        // Fetch local IP
+        // =====================
+        // Local IP
+        // =====================
         function fetchLocalIP() {
             fetch('/get_local_ip').then(res => res.json()).then(data => {
                 document.getElementById('local-ip-value').textContent = data.local_ip;
             });
         }
 
-        // Update Cogs Target
-        function updateCogsTarget() {
-            const ip = document.getElementById('cogs_ip').value;
-            const port = document.getElementById('cogs_port').value;
-            fetch('/update_cogs_target', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip, port })
-            }).then(() => alert("Cogs target updated successfully!"));
-        }
-
-        // Fetch existing Cogs Target
-        function fetchCogsTarget() {
-            fetch('/get_config').then(res => res.json()).then(config => {
-                const cogsTarget = config.targets.find(target => target.name === 'cogs');
-                if (cogsTarget) {
-                    document.getElementById('cogs_ip').value = cogsTarget.ip || '';
-                    document.getElementById('cogs_port').value = cogsTarget.port || '';
-                }
-            });
-        }
-
+        // =====================
+        // Init
+        // =====================
         window.onload = function () {
             fetchConfig();
             fetchLocalIP();
-            fetchCogsTarget();
         };
-
-
-
     </script>
 </body>
 

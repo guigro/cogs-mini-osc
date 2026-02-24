@@ -27,15 +27,29 @@ The web interface is accessible at `http://<flask_ip>:<flask_port>` (default: ht
 The application runs multiple concurrent servers:
 - **OSC Server**: Listens for incoming OSC messages (using `pythonosc`)
 - **Flask HTTP Server**: Serves the web UI and handles HTTP API requests
-- **TCP/UDP Servers**: Started dynamically based on route configuration
+- **TCP/UDP Servers**: Started dynamically based on connection configuration
 
 ### Configuration (`config.json`)
 
-JSON configuration with four main sections:
+JSON configuration with three main sections:
 - `osc_server`: IP and port for OSC listener
 - `flask_server`: IP and port for HTTP server
-- `targets`: List of destination endpoints (OSC, HTTP, TCP, UDP)
-- `routes`: Message routing rules from source to target
+- `connections`: List of unified connection definitions (from + to)
+
+Each connection is self-descriptive with a `from` (source) and `to` (destination):
+```json
+{
+  "name": "HTTP to Cogs",
+  "from": { "protocol": "http", "endpoint": "/send_osc" },
+  "to": { "protocol": "osc", "ip": "192.168.50.248", "port": 12097 }
+}
+```
+
+**Auto-migration**: Old config files using `targets` + `routes` are automatically converted to the `connections` format on first load.
+
+### Internal Adapter
+
+At startup, `expand_connections()` converts the `connections[]` array into internal `targets_dict` + `routes[]` structures. The routing engine (`handle_osc_in_message`, `handle_incoming_non_osc`, `send_to_tcp`, etc.) operates on these internal structures unchanged.
 
 ### Message Routing Flow
 
@@ -43,29 +57,30 @@ JSON configuration with four main sections:
 2. **Incoming HTTP** (`/send_osc`) → `http_endpoint()` → `handle_incoming_non_osc()` → routes to OSC targets
 3. **Incoming TCP/UDP** → `tcp_server()`/`udp_server()` → `handle_incoming_non_osc()` → routes to OSC targets
 
-### Route Value Mapping
+### Value Mapping
 
-Routes can include a `values` array to map positional OSC arguments to named dictionary keys:
+Connections from OSC can include a `values` array to map positional OSC arguments to named dictionary keys:
 ```json
 {
-  "from": { "protocol": "osc", "address_pattern": "/example", "values": ["GameID", "Level"] },
-  "to": { "target_name": "MyTarget" }
+  "name": "Quiz1",
+  "from": { "protocol": "osc", "address_pattern": "/quiz1", "values": ["GameID", "Level"] },
+  "to": { "protocol": "tcp", "ip": "192.168.50.232", "port": 5000 }
 }
 ```
 OSC args `[42, 5]` become `{"GameID": 42, "Level": 5}`.
 
 ### Web Interface (`index.html`)
 
-Single-page Bulma CSS application with four tabs:
-- **Servers**: Configure OSC, TCP, Flask server settings and Cogs target
-- **Targets**: Manage destination endpoints
-- **Routes**: Configure message routing rules
+Single-page Bulma CSS application with three tabs:
+- **Servers**: Configure OSC and Flask server settings
+- **Connections**: Manage unified connection definitions (source + destination)
 - **Logs**: View real-time application logs (auto-refresh every 2 seconds)
 
 ### Key Flask API Endpoints
 
 - `GET /get_config` - Retrieve full configuration
 - `POST /send_osc` - Send OSC message (supports JSON and form-urlencoded)
-- `POST /add_target`, `/remove_target` - Manage targets
-- `POST /add_route`, `/remove_route` - Manage routes
+- `POST /add_connection` - Add a new connection
+- `POST /remove_connection` - Remove a connection by index
+- `POST /update_osc_server`, `/update_flask_server` - Update server settings
 - `GET /get_logs`, `POST /clear_logs` - Log management

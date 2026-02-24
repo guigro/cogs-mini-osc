@@ -24,6 +24,108 @@ logs = []
 # Chargement et validation de la config
 ########################################
 
+def migrate_config(cfg):
+    """Migrate old targets+routes format to new connections format."""
+    if "connections" in cfg:
+        return cfg  # Already in new format
+
+    if "targets" not in cfg or "routes" not in cfg:
+        return cfg
+
+    targets_by_name = {}
+    for t in cfg["targets"]:
+        targets_by_name[t["name"]] = t
+
+    connections = []
+    for route in cfg["routes"]:
+        fr = route["from"]
+        to = route["to"]
+        target_name = to.get("target_name", "")
+        target = targets_by_name.get(target_name, {})
+
+        # Auto-generate a descriptive name
+        conn_name = f"{fr['protocol'].upper()} to {target_name}"
+        conn = {"name": conn_name}
+
+        # Build "from" section
+        conn_from = {"protocol": fr["protocol"]}
+        if fr["protocol"] == "osc":
+            conn_from["address_pattern"] = fr.get("address_pattern", "")
+            if "values" in fr:
+                conn_from["values"] = fr["values"]
+        elif fr["protocol"] == "http":
+            conn_from["endpoint"] = fr.get("endpoint", "")
+        elif fr["protocol"] in ["tcp", "udp"]:
+            conn_from["listen_ip"] = fr.get("ip", "")
+            conn_from["listen_port"] = fr.get("port", 0)
+
+        conn["from"] = conn_from
+
+        # Build "to" section
+        target_type = target.get("type", "")
+        conn_to = {"protocol": target_type}
+        if target_type == "osc":
+            conn_to["ip"] = target.get("ip", "")
+            conn_to["port"] = target.get("port", 0)
+            if "address" in to:
+                conn_to["address"] = to["address"]
+        elif target_type in ["tcp", "udp"]:
+            conn_to["ip"] = target.get("ip", "")
+            conn_to["port"] = target.get("port", 0)
+        elif target_type == "http":
+            conn_to["url"] = target.get("url", "")
+
+        conn["to"] = conn_to
+        connections.append(conn)
+
+    new_cfg = {
+        "osc_server": cfg["osc_server"],
+        "flask_server": cfg["flask_server"],
+        "connections": connections
+    }
+    return new_cfg
+
+
+def expand_connections(cfg):
+    """Convert connections[] to internal targets_dict + routes[] for the routing engine."""
+    global targets_dict, routes
+    targets_dict = {}
+    routes = []
+
+    for i, conn in enumerate(cfg.get("connections", [])):
+        fr = conn["from"]
+        to = conn["to"]
+        # Generate a unique internal target name
+        target_name = f"_conn_{i}_{conn.get('name', '')}"
+
+        # Build internal target
+        target = {"name": target_name, "type": to["protocol"]}
+        if to["protocol"] in ["osc", "tcp", "udp"]:
+            target["ip"] = to.get("ip", "")
+            target["port"] = to.get("port", 0)
+        if to["protocol"] == "http":
+            target["url"] = to.get("url", "")
+        targets_dict[target_name] = target
+
+        # Build internal route
+        route_from = {"protocol": fr["protocol"]}
+        if fr["protocol"] == "osc":
+            route_from["address_pattern"] = fr.get("address_pattern", "")
+            if "values" in fr:
+                route_from["values"] = fr["values"]
+        elif fr["protocol"] == "http":
+            route_from["endpoint"] = fr.get("endpoint", "")
+        elif fr["protocol"] in ["tcp", "udp"]:
+            route_from["ip"] = fr.get("listen_ip", "")
+            route_from["port"] = fr.get("listen_port", 0)
+
+        route_to = {"target_name": target_name}
+        if to["protocol"] == "osc" and "address" in to:
+            route_to["address"] = to["address"]
+
+        routes.append({"from": route_from, "to": route_to})
+
+
 def load_config(filename):
     try:
         with open(filename, "r", encoding="utf-8") as f:
@@ -35,28 +137,21 @@ def load_config(filename):
         print(f"Error parsing JSON in {filename} : {e}")
         sys.exit(1)
 
-    # Validation minimale
+    # Auto-migrate old format
+    cfg = migrate_config(cfg)
+
+    # Validation
     if "osc_server" not in cfg:
         print("Invalid configuration : 'osc_server' is missing.")
         sys.exit(1)
     if "flask_server" not in cfg:
         print("Invalid configuration : 'flask_server' is missing.")
         sys.exit(1)
-    if "targets" not in cfg or not isinstance(cfg["targets"], list):
-        print("Invalid configuration : 'targets' must be a list.")
-        sys.exit(1)
-    if "routes" not in cfg or not isinstance(cfg["routes"], list):
-        print("Invalid configuration : 'routes' must be a list.")
+    if "connections" not in cfg or not isinstance(cfg["connections"], list):
+        print("Invalid configuration : 'connections' must be a list.")
         sys.exit(1)
 
     return cfg
-
-def init_targets_and_routes(cfg):
-    for t in cfg["targets"]:
-        name = t["name"]
-        targets_dict[name] = t
-    global routes
-    routes = cfg["routes"]
 
 
 def save_config(data):
@@ -93,63 +188,45 @@ def update_flask_server():
     save_config(config)
     return jsonify({"status": "success"})
 
-@app.route('/update_tcp_server', methods=['POST'])
-def update_tcp_server():
+@app.route('/add_connection', methods=['POST'])
+def add_connection():
     data = request.json
-    config = load_config(CONFIG_FILE)
-    for route in config['routes'] :
-        if route['from']['protocol'] == "tcp":
-            route['from']['ip'] = data['ip']
-            route['from']['port'] = int(data['port'])
-    save_config(config)
-    return jsonify({"status": "success"})
-
-@app.route('/add_target', methods=['POST'])
-def add_target():
-    data = request.json
-    new_target = {
-        "name": data['name'],
-        "type": data['type'],
-        "ip": data.get('address', ''),
-        "port": int(data.get('port', 0)),
-        "url": data.get('url', '')
+    new_conn = {
+        "name": data.get("name", ""),
+        "from": data["from"],
+        "to": data["to"]
     }
     config = load_config(CONFIG_FILE)
-    config['targets'].append(new_target)
+    config['connections'].append(new_conn)
     save_config(config)
+    expand_connections(config)
     return jsonify({"status": "success"})
 
-@app.route('/remove_target', methods=['POST'])
-def remove_target():
+@app.route('/update_connection', methods=['POST'])
+def update_connection():
     data = request.json
     index = int(data['index'])
     config = load_config(CONFIG_FILE)
-    if 0 <= index < len(config['targets']):
-        del config['targets'][index]
+    if 0 <= index < len(config['connections']):
+        config['connections'][index] = {
+            "name": data.get("name", ""),
+            "from": data["from"],
+            "to": data["to"]
+        }
         save_config(config)
+        expand_connections(config)
         return jsonify({"status": "success"})
     return jsonify({"status": "error", "message": "Invalid index"}), 400
 
-@app.route('/add_route', methods=['POST'])
-def add_route():
-    data = request.json
-    new_route = {
-        "from": data['from'],
-        "to": data['to']
-    }
-    config = load_config(CONFIG_FILE)
-    config['routes'].append(new_route)
-    save_config(config)
-    return jsonify({"status": "success"})
-
-@app.route('/remove_route', methods=['POST'])
-def remove_route():
+@app.route('/remove_connection', methods=['POST'])
+def remove_connection():
     data = request.json
     index = int(data['index'])
     config = load_config(CONFIG_FILE)
-    if 0 <= index < len(config['routes']):
-        del config['routes'][index]
+    if 0 <= index < len(config['connections']):
+        del config['connections'][index]
         save_config(config)
+        expand_connections(config)
         return jsonify({"status": "success"})
     return jsonify({"status": "error", "message": "Invalid index"}), 400
 
@@ -168,30 +245,6 @@ def clear_logs():
 def get_local_ip():
     local_ip = socket.gethostbyname(socket.gethostname())
     return jsonify({"local_ip": local_ip})
-
-# API to update Cogs target
-@app.route('/update_cogs_target', methods=['POST'])
-def update_cogs_target():
-    data = request.json
-    
-    # Charger la configuration
-    config = load_config(CONFIG_FILE)
-    
-    for target in config.get('targets', []):
-        if target.get('name') == 'cogs':
-            target['ip'] = str(data['ip'])  # Assurez-vous que l'IP est une chaîne
-            target['port'] = int(data['port'])  # Le port doit être un entier
-            
-            print(f"IP de 'cogs' mise à jour à : {data['ip']}:{data['port']}")
-            break
-    else:
-        return jsonify({"status": "error", "message": "Target 'cogs' not found"}), 404
-
-    # Sauvegarder les modifications
-    save_config(config)
-    print(f"Updated Cogs Target to {data['ip']}:{data['port']}")
-    return jsonify({"status": "success", "ip": data['ip'], "port": data['port']})
-
 
 
 @app.route('/send_osc', methods=['GET', 'POST'])
@@ -246,9 +299,6 @@ def send_to_http(target, address, args):
         add_log(f"[HTTP] Error sending to {url}: {e}")
 
 def send_to_tcp(target, address, args):
-    # print("[DEBUG] (send_to_tcp) args reçu =", args)
-    # add_log(f"[DEBUG] (send_to_tcp) args reçu = {args}")
-
     ip = target["ip"]
     port = target["port"]
 
@@ -264,12 +314,8 @@ def send_to_tcp(target, address, args):
             "args": args
         }
 
-
-    # print("[DEBUG] send_to_tcp payload =", payload)
-    # add_log(f"[DEBUG] send_to_tcp payload = {payload}")
-    
     data = json.dumps(payload).encode("utf-8")
-    
+
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((ip, port))
@@ -288,7 +334,7 @@ def send_to_udp(target, address, args):
         "args": args
     }
     data = json.dumps(payload).encode("utf-8")
-    
+
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.sendto(data, (ip, port))
@@ -328,17 +374,10 @@ def handle_osc_out(target_name, address, args):
 ########################################
 
 def handle_osc_in_message(address, args):
-    # print(f"[DEBUG] handle_osc_in_message called with address={address}, args={args}")
-    # add_log(f"[DEBUG] handle_osc_in_message called with address={address}, args={args}")
-
     # On parcourt les routes pour voir si on a une route OSC->X
     for route in routes:
         if route["from"]["protocol"] == "osc":
-            # print(f"[DEBUG] Checking route with address_pattern={route['from']['address_pattern']}")
-            # add_log(f"[DEBUG] Checking route with address_pattern={route['from']['address_pattern']}")
-            
             if route["from"]["address_pattern"] == address:
-                # print(f"[DEBUG] This route is matched => {route}")
                 target_name = route["to"]["target_name"]
                 # Type de target ?
                 target = targets_dict.get(target_name)
@@ -346,46 +385,34 @@ def handle_osc_in_message(address, args):
                     print(f"Target {target_name} can't be found")
                     add_log(f"Target {target_name} can't be found")
                     return
-                
 
                 # ----------------------------------------------------------------
                 # Étape : gestion du mapping args -> dictionnaire selon 'values'
                 # ----------------------------------------------------------------
-                from_cfg = route["from"]  # On se raccourcit l'écriture
+                from_cfg = route["from"]
                 if "values" in from_cfg:
-                    # print(f"[DEBUG] 'values' found => {route['from']['values']}")
-                    # On a un tableau de keys, comme ["GameID", "Level1", "Level2", "Level3"]
-                    # On construit un dictionnaire : { "GameID": args[0], "Level1": args[1], ... }
                     mapped_args = {}
                     for i, key_name in enumerate(from_cfg["values"]):
-                        # Pour éviter les erreurs si le message n'a pas assez d'arguments
-                        # on vérifie si i < len(args)
                         if i < len(args):
                             mapped_args[key_name] = args[i]
                         else:
                             mapped_args[key_name] = None
-                    # C'est ce dictionnaire qu'on enverra
                     final_args = mapped_args
                 else:
-                    # print("[DEBUG] No 'values' in this route")
-                    # Pas de 'values' => on garde la liste d'arguments comme avant
                     final_args = args
                 # ----------------------------------------------------------------
-
 
                 ttype = target["type"]
                 if ttype == "http":
                     send_to_http(target, address, final_args)
                     add_log("Send request to HTTP")
                 elif ttype == "tcp":
-                    # print("[DEBUG] (handle_osc_in_message) final_args avant send_to_tcp =", final_args)
-                    # add_log(f"[DEBUG] (handle_osc_in_message) final_args avant send_to_tcp = {final_args}")
                     send_to_tcp(target, address, final_args)
                 elif ttype == "udp":
                     send_to_udp(target, address, final_args)
                 else:
                     print(f"Type de cible inconnu: {ttype}")
-                # Pour l'instant, on s’arrête après la première route matchée
+                # Pour l'instant, on s'arrête après la première route matchée
                 return
 
 def handle_incoming_non_osc(protocol, data, route_filter):
@@ -406,9 +433,8 @@ def handle_incoming_non_osc(protocol, data, route_filter):
 
             if match:
                 # On a trouvé une route non-OSC->OSC
-                # On récupère le target OSC (main_osc_out)
                 target_name = route["to"]["target_name"]
-                
+
                 # Priorise l'adresse depuis les données de la requête HTTP
                 address = data.get("address") or route["to"].get("address") or data.get("osc_address")
                 if not address:
@@ -494,12 +520,16 @@ def osc_message_handler(address, *args):
 
 if __name__ == "__main__":
     config = load_config(CONFIG_FILE)
-    init_targets_and_routes(config)
+
+    # Save migrated config if it was in old format
+    save_config(config)
+
+    # Expand connections to internal targets_dict + routes
+    expand_connections(config)
 
     print("Config loaded with success.")
     logs.append("Server is running and ready to receive requests.")
-    # print(json.dumps(config, indent=2))
-    
+
     # Lancer le serveur OSC entrant
     osc_ip = config["osc_server"]["listen_ip"]
     osc_port = config["osc_server"]["listen_port"]
@@ -520,5 +550,4 @@ if __name__ == "__main__":
             start_udp_server(fr["ip"], fr["port"])
 
     # Lancer le serveur HTTP Flask
-    # Si tu veux changer le port HTTP, fais-le ici
     app.run(host=config["flask_server"]["ip"], port=config["flask_server"]["port"], debug=False)

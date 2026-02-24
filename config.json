@@ -1,50 +1,47 @@
 {
     "osc_server": {
-        "listen_ip": "192.168.50.248",
+        "listen_ip": "192.168.50.226",
         "listen_port": 53000
     },
     "flask_server": {
-        "ip": "192.168.50.248",
+        "ip": "192.168.50.226",
         "port": 5009
     },
-    "targets": [
+    "connections": [
         {
-            "name": "cogs",
-            "type": "osc",
-            "ip": "192.168.50.248",
-            "port": 12097
-        },
-        {
-            "name": "Quiz1",
-            "type": "tcp",
-            "ip": "192.168.50.232",
-            "port": 5000,
-            "url": ""
-        }
-    ],
-    "routes": [
-        {
+            "name": "HTTP to cogs",
             "from": {
                 "protocol": "http",
+                "name": "Any HTTP",
                 "endpoint": "/send_osc"
             },
             "to": {
-                "target_name": "cogs"
+                "protocol": "osc",
+                "name": "Cogs",
+                "ip": "192.168.50.226",
+                "port": 12097
             }
         },
         {
+            "name": "TCP to cogs",
             "from": {
                 "protocol": "tcp",
-                "ip": "192.168.50.248",
-                "port": 57676
+                "name": "Any TCP",
+                "listen_ip": "192.168.50.226",
+                "listen_port": 57676
             },
             "to": {
-                "target_name": "cogs"
+                "protocol": "osc",
+                "name": "Cogs",
+                "ip": "192.168.50.226",
+                "port": 12097
             }
         },
         {
+            "name": "OSC to Quiz1",
             "from": {
                 "protocol": "osc",
+                "name": "Cogs",
                 "address_pattern": "/quiz1",
                 "values": [
                     "GameID",
@@ -54,7 +51,10 @@
                 ]
             },
             "to": {
-                "target_name": "Quiz1"
+                "protocol": "tcp",
+                "name": "Quiz1",
+                "ip": "192.168.50.226",
+                "port": 53001
             }
         }
     ]
