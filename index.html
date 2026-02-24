@@ -972,11 +972,15 @@
             }
         }
 
-        function formatDestination(to) {
+        function formatDestination(to, conn) {
             const label = to.name ? `<strong>${to.name}</strong><br>` : '';
             const tag = protoTag(to.protocol);
             if (to.protocol === 'http') {
-                return label + `${tag} <code>${to.url || ''}</code>`;
+                let s = `${tag} <code>${to.url || ''}</code>`;
+                if (conn && conn.response_to_osc && conn.response_to_osc.enabled) {
+                    s += ` <span class="proto-tag proto-tag-osc" style="font-size:0.65rem; margin-left:0.4rem;" title="Response forwarded as OSC to ${conn.response_to_osc.ip}:${conn.response_to_osc.port} ${conn.response_to_osc.address}">↩ OSC</span>`;
+                }
+                return label + s;
             } else {
                 let s = `${tag} ${to.ip || ''}:${to.port || ''}`;
                 if (to.protocol === 'osc' && to.address) {
@@ -999,7 +1003,7 @@
                         <td><strong>${c.name || ''}</strong></td>
                         <td>${formatSource(c.from)}</td>
                         <td class="conn-arrow"><i class="fas fa-long-arrow-alt-right"></i></td>
-                        <td>${formatDestination(c.to)}</td>
+                        <td>${formatDestination(c.to, c)}</td>
                         <td style="white-space:nowrap;">
                             <button class='button is-info is-small btn-icon mr-1' onclick='editConnection(${i})' title='Edit'><i class='fas fa-pen'></i></button>
                             <button class='button is-danger is-small btn-icon' onclick='deleteConnection(${i})' title='Delete'><i class='fas fa-trash-alt'></i></button>
@@ -1100,6 +1104,17 @@
                 document.getElementById('to_port').value = conn.to.port || '';
             } else if (conn.to.protocol === 'http') {
                 document.getElementById('to_url').value = conn.to.url || '';
+                // Fill response_to_osc fields if present
+                if (conn.response_to_osc) {
+                    const cb = document.getElementById('to_response_enabled');
+                    if (cb) {
+                        cb.checked = !!conn.response_to_osc.enabled;
+                        toggleResponseFields();
+                        document.getElementById('to_resp_ip').value = conn.response_to_osc.ip || '';
+                        document.getElementById('to_resp_port').value = conn.response_to_osc.port || '';
+                        document.getElementById('to_resp_address').value = conn.response_to_osc.address || '';
+                    }
+                }
             }
 
             document.getElementById('add-connection-form').style.display = 'block';
@@ -1188,7 +1203,35 @@
                     <div class="field">
                         <label class="label">URL</label>
                         <input id="to_url" class="input" type="text" placeholder="https://example.com/api">
+                    </div>
+                    <div class="field mt-4">
+                        <label class="label" style="cursor:pointer;">
+                            <input type="checkbox" id="to_response_enabled" onchange="toggleResponseFields()"> Monitor HTTP Response
+                        </label>
+                        <p class="help">Forward the HTTP response body as an OSC message</p>
+                    </div>
+                    <div id="response-osc-fields" style="display:none;">
+                        <div class="field">
+                            <label class="label">Response OSC IP</label>
+                            <input id="to_resp_ip" class="input" type="text" placeholder="192.168.50.226">
+                        </div>
+                        <div class="field">
+                            <label class="label">Response OSC Port</label>
+                            <input id="to_resp_port" class="input" type="number" placeholder="12097">
+                        </div>
+                        <div class="field">
+                            <label class="label">Response OSC Address</label>
+                            <input id="to_resp_address" class="input" type="text" placeholder="/api_response">
+                        </div>
                     </div>`;
+            }
+        }
+
+        function toggleResponseFields() {
+            const cb = document.getElementById('to_response_enabled');
+            const fields = document.getElementById('response-osc-fields');
+            if (cb && fields) {
+                fields.style.display = cb.checked ? 'block' : 'none';
             }
         }
 
@@ -1243,7 +1286,20 @@
                 name = `${fromProtocol.toUpperCase()} to ${toProtocol.toUpperCase()}`;
             }
 
-            return { name, from: connFrom, to: connTo };
+            const conn = { name, from: connFrom, to: connTo };
+
+            // Add response_to_osc if enabled
+            const respCheckbox = document.getElementById('to_response_enabled');
+            if (respCheckbox && respCheckbox.checked) {
+                conn.response_to_osc = {
+                    enabled: true,
+                    ip: document.getElementById('to_resp_ip').value,
+                    port: parseInt(document.getElementById('to_resp_port').value) || 0,
+                    address: document.getElementById('to_resp_address').value
+                };
+            }
+
+            return conn;
         }
 
         function submitConnection() {

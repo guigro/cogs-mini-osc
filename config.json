@@ -1,60 +1,82 @@
 {
     "osc_server": {
-        "listen_ip": "192.168.50.226",
+        "listen_ip": "127.0.0.1",
         "listen_port": 53000
     },
     "flask_server": {
-        "ip": "192.168.50.226",
-        "port": 5009
+        "ip": "127.0.0.1",
+        "port": 5000
     },
     "connections": [
         {
-            "name": "HTTP to cogs",
+            "name": "HTTP to Cogs",
             "from": {
                 "protocol": "http",
-                "name": "Any HTTP",
                 "endpoint": "/send_osc"
             },
             "to": {
                 "protocol": "osc",
-                "name": "Cogs",
-                "ip": "192.168.50.226",
+                "ip": "127.0.0.1",
                 "port": 12097
             }
         },
         {
-            "name": "TCP to cogs",
+            "name": "TCP to Cogs",
             "from": {
                 "protocol": "tcp",
-                "name": "Any TCP",
-                "listen_ip": "192.168.50.226",
+                "listen_ip": "127.0.0.1",
                 "listen_port": 57676
             },
             "to": {
                 "protocol": "osc",
-                "name": "Cogs",
-                "ip": "192.168.50.226",
+                "ip": "127.0.0.1",
                 "port": 12097
             }
         },
         {
-            "name": "OSC to Quiz1",
+            "name": "UDP to Cogs",
+            "from": {
+                "protocol": "udp",
+                "listen_ip": "127.0.0.1",
+                "listen_port": 57677
+            },
+            "to": {
+                "protocol": "osc",
+                "ip": "127.0.0.1",
+                "port": 12097
+            }
+        },
+        {
+            "name": "OSC to TCP with values",
             "from": {
                 "protocol": "osc",
-                "name": "Cogs",
-                "address_pattern": "/quiz1",
+                "address_pattern": "/game",
                 "values": [
                     "GameID",
-                    "Level1",
-                    "Level2",
-                    "Level3"
+                    "Level"
                 ]
             },
             "to": {
                 "protocol": "tcp",
-                "name": "Quiz1",
-                "ip": "192.168.50.226",
-                "port": 53001
+                "ip": "127.0.0.1",
+                "port": 5001
+            }
+        },
+        {
+            "name": "OSC to HTTP with response",
+            "from": {
+                "protocol": "osc",
+                "address_pattern": "/api_call"
+            },
+            "to": {
+                "protocol": "http",
+                "url": "https://httpbin.org/post"
+            },
+            "response_to_osc": {
+                "enabled": true,
+                "ip": "127.0.0.1",
+                "port": 12097,
+                "address": "/api_response"
             }
         }
     ]

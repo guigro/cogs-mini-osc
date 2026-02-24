@@ -123,7 +123,10 @@ def expand_connections(cfg):
         if to["protocol"] == "osc" and "address" in to:
             route_to["address"] = to["address"]
 
-        routes.append({"from": route_from, "to": route_to})
+        route = {"from": route_from, "to": route_to}
+        if "response_to_osc" in conn:
+            route["response_to_osc"] = conn["response_to_osc"]
+        routes.append(route)
 
 
 def load_config(filename):
@@ -196,6 +199,8 @@ def add_connection():
         "from": data["from"],
         "to": data["to"]
     }
+    if "response_to_osc" in data:
+        new_conn["response_to_osc"] = data["response_to_osc"]
     config = load_config(CONFIG_FILE)
     config['connections'].append(new_conn)
     save_config(config)
@@ -208,11 +213,14 @@ def update_connection():
     index = int(data['index'])
     config = load_config(CONFIG_FILE)
     if 0 <= index < len(config['connections']):
-        config['connections'][index] = {
+        updated_conn = {
             "name": data.get("name", ""),
             "from": data["from"],
             "to": data["to"]
         }
+        if "response_to_osc" in data:
+            updated_conn["response_to_osc"] = data["response_to_osc"]
+        config['connections'][index] = updated_conn
         save_config(config)
         expand_connections(config)
         return jsonify({"status": "success"})
@@ -294,9 +302,14 @@ def send_to_http(target, address, args):
         r = requests.post(url, json=payload, timeout=2)
         print(f"[HTTP] Send to {url}, statut={r.status_code}")
         add_log(f"[HTTP] Send to {url}, statut={r.status_code}")
+        try:
+            return r.json()
+        except Exception:
+            return r.text if r.text else None
     except Exception as e:
         print(f"[HTTP] Error sending to {url}: {e}")
         add_log(f"[HTTP] Error sending to {url}: {e}")
+        return None
 
 def send_to_tcp(target, address, args):
     ip = target["ip"]
@@ -404,8 +417,17 @@ def handle_osc_in_message(address, args):
 
                 ttype = target["type"]
                 if ttype == "http":
-                    send_to_http(target, address, final_args)
+                    response = send_to_http(target, address, final_args)
                     add_log("Send request to HTTP")
+                    # Forward HTTP response as OSC if configured
+                    resp_cfg = route.get("response_to_osc")
+                    if resp_cfg and resp_cfg.get("enabled") and response is not None:
+                        if isinstance(response, dict):
+                            osc_args = [json.dumps(v) if isinstance(v, (dict, list)) else v for v in response.values()]
+                        else:
+                            osc_args = [str(response)]
+                        send_osc_message(resp_cfg["ip"], resp_cfg["port"], resp_cfg["address"], osc_args)
+                        add_log(f"[HTTP→OSC] Response forwarded to {resp_cfg['ip']}:{resp_cfg['port']} {resp_cfg['address']}")
                 elif ttype == "tcp":
                     send_to_tcp(target, address, final_args)
                 elif ttype == "udp":
