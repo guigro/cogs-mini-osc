@@ -105,6 +105,9 @@ def expand_connections(cfg):
             target["port"] = to.get("port", 0)
         if to["protocol"] == "http":
             target["url"] = to.get("url", "")
+            target["method"] = to.get("method", "POST").upper()
+            if "params" in to:
+                target["params"] = to["params"]
         targets_dict[target_name] = target
 
         # Build internal route
@@ -251,7 +254,13 @@ def clear_logs():
 # API to get local IP
 @app.route('/get_local_ip', methods=['GET'])
 def get_local_ip():
-    local_ip = socket.gethostbyname(socket.gethostname())
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = socket.gethostbyname(socket.gethostname())
     return jsonify({"local_ip": local_ip})
 
 
@@ -294,14 +303,24 @@ def http_endpoint():
 
 def send_to_http(target, address, args):
     url = target["url"]
-    payload = {
-        "address": address,
-        "args": args
-    }
+    method = target.get("method", "POST").upper()
+    static_params = target.get("params", {})
     try:
-        r = requests.post(url, json=payload, timeout=2)
-        print(f"[HTTP] Send to {url}, statut={r.status_code}")
-        add_log(f"[HTTP] Send to {url}, statut={r.status_code}")
+        if method == "GET":
+            if isinstance(args, dict):
+                params = {**static_params, **args}
+            else:
+                params = {**static_params, "address": address, "args": ",".join(str(a) for a in args)}
+            r = requests.get(url, params=params, timeout=2)
+            qs = "&".join(f"{k}={v}" for k, v in params.items())
+            full_url = f"{url}?{qs}" if qs else url
+            print(f"[HTTP] GET {full_url}, statut={r.status_code}")
+            add_log(f"[HTTP] GET {full_url}, statut={r.status_code}")
+        else:
+            payload = {"address": address, "args": args}
+            r = requests.post(url, json=payload, timeout=2)
+            print(f"[HTTP] POST {url} {payload}, statut={r.status_code}")
+            add_log(f"[HTTP] POST {url} {payload}, statut={r.status_code}")
         try:
             return r.json()
         except Exception:

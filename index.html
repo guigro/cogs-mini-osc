@@ -217,6 +217,44 @@
             border-left-color: var(--color-http) !important;
         }
 
+        .server-card.tcp-card {
+            border-left-color: var(--color-tcp) !important;
+        }
+
+        .server-card.udp-card {
+            border-left-color: var(--color-udp) !important;
+        }
+
+        .endpoint-info {
+            margin-top: 1rem;
+            padding: 0.75rem 1rem;
+            background: var(--bg-card-nested);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            font-size: 0.85rem;
+        }
+
+        .endpoint-info p {
+            color: var(--text-secondary);
+            margin-bottom: 0.3rem;
+        }
+
+        .endpoint-info code {
+            font-size: 0.9em;
+            color: var(--text-primary);
+        }
+
+        .endpoint-info pre {
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background: var(--bg-input);
+            border-radius: 4px;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
         /* ========================================
            Titles
            ======================================== */
@@ -694,8 +732,6 @@
             <!-- Servers Configuration -->
             <div id="content-servers" class="box">
                 <h2 class="title is-4">Servers parameters</h2>
-                <div class="notification is-danger"><i class="fas fa-exclamation-triangle" style="margin-right:0.5rem;"></i>For general purpose and to avoid headaches, I recommend to put local IP addresses instead of "localhost"</div>
-                <div id="server-summary" class="notification is-info"></div>
                 <!-- Display local IP -->
                 <div id="local-ip" class="notification is-primary">
                     <i class="fas fa-network-wired" style="margin-right:0.5rem;"></i>Local Server IP: <strong><span id="local-ip-value"></span></strong>
@@ -703,7 +739,7 @@
 
                 <!-- OSC Server -->
                 <div class="box server-card osc-card">
-                    <h3 class="title is-5"><span class="proto-tag proto-tag-osc" style="margin-right:0.5rem;">OSC</span> Server</h3>
+                    <h3 class="title is-5"><span class="proto-tag proto-tag-osc" style="margin-right:0.5rem;">OSC</span> OSC Server</h3>
                     <div class="field">
                         <label class="label">IP Address</label>
                         <input id="osc_ip" class="input" type="text">
@@ -713,10 +749,11 @@
                         <input id="osc_port" class="input" type="number">
                     </div>
                     <button class="button is-primary" onclick="updateOSCServer()"><i class="fas fa-save" style="margin-right:0.4rem;"></i>Update</button>
+                    <div class="endpoint-info" id="osc-endpoint-info"></div>
                 </div>
                 <!-- Flask Server -->
                 <div class="box server-card flask-card">
-                    <h3 class="title is-5"><span class="proto-tag proto-tag-http" style="margin-right:0.5rem;">HTTP</span> Flask Server</h3>
+                    <h3 class="title is-5"><span class="proto-tag proto-tag-http" style="margin-right:0.5rem;">HTTP</span> HTTP Server</h3>
                     <div class="field">
                         <label class="label">IP Address</label>
                         <input id="flask_ip" class="input" type="text" placeholder="192.168.0.150">
@@ -726,10 +763,21 @@
                         <input id="flask_port" class="input" type="number">
                     </div>
                     <button class="button is-primary" onclick="updateFlaskServer()"><i class="fas fa-save" style="margin-right:0.4rem;"></i>Update</button>
+                    <div class="endpoint-info" id="http-endpoint-info"></div>
                     <div id="flask-restart" style="display:none;" class="notification is-warning mt-4">
                         <p>The port has been modified. Relaunch the app manually to apply changes.</p>
                         <a id="new-url" class="button is-primary mt-2" target="_blank">Go to the new URL</a>
                     </div>
+                </div>
+                <!-- TCP Listeners (shown dynamically) -->
+                <div class="box server-card tcp-card" id="tcp-listeners-card" style="display:none;">
+                    <h3 class="title is-5"><span class="proto-tag proto-tag-tcp" style="margin-right:0.5rem;">TCP</span> Listeners</h3>
+                    <div id="tcp-listeners-list"></div>
+                </div>
+                <!-- UDP Listeners (shown dynamically) -->
+                <div class="box server-card udp-card" id="udp-listeners-card" style="display:none;">
+                    <h3 class="title is-5"><span class="proto-tag proto-tag-udp" style="margin-right:0.5rem;">UDP</span> Listeners</h3>
+                    <div id="udp-listeners-list"></div>
                 </div>
             </div>
 
@@ -911,15 +959,18 @@
         // =====================
         // Config loading
         // =====================
+        let cachedConfig = null;
+        let cachedLocalIp = null;
+
         function fetchConfig() {
             fetch('/get_config').then(res => res.json()).then(config => {
-                document.getElementById('server-summary').innerHTML =
-                    `<i class="fas fa-info-circle" style="margin-right:0.4rem;"></i>OSC: ${config.osc_server.listen_ip}:${config.osc_server.listen_port} | Flask: ${config.flask_server.port}`;
+                cachedConfig = config;
                 document.getElementById('osc_ip').value = config.osc_server.listen_ip;
                 document.getElementById('osc_port').value = config.osc_server.listen_port;
                 document.getElementById('flask_ip').value = config.flask_server.ip;
                 document.getElementById('flask_port').value = config.flask_server.port;
                 fetchConnections();
+                updateServerEndpoints();
             });
         }
 
@@ -933,8 +984,10 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ip, port })
-            }).then(() => showToast("OSC server updated successfully!", "success"))
-                .catch(err => showToast("Error: " + err, "error"));
+            }).then(() => {
+                showToast("OSC server updated successfully!", "success");
+                fetchConfig();
+            }).catch(err => showToast("Error: " + err, "error"));
         }
 
         function updateFlaskServer() {
@@ -947,6 +1000,7 @@
                 const newUrl = `http://${ip}:${port}`;
                 document.getElementById('flask-restart').style.display = 'block';
                 document.getElementById('new-url').href = newUrl;
+                fetchConfig();
             });
         }
 
@@ -1533,8 +1587,79 @@
         // =====================
         function fetchLocalIP() {
             fetch('/get_local_ip').then(res => res.json()).then(data => {
+                cachedLocalIp = data.local_ip;
                 document.getElementById('local-ip-value').textContent = data.local_ip;
+                updateServerEndpoints();
             });
+        }
+
+        // =====================
+        // Server endpoint info
+        // =====================
+        function updateServerEndpoints() {
+            if (!cachedConfig || !cachedLocalIp) return;
+            const config = cachedConfig;
+            const localIp = cachedLocalIp;
+
+            // OSC endpoint info
+            const oscPort = config.osc_server.listen_port;
+            document.getElementById('osc-endpoint-info').innerHTML =
+                `<p>Send OSC messages to:</p>` +
+                `<code>${localIp}:${oscPort}</code>`;
+
+            // HTTP endpoint info
+            const flaskPort = config.flask_server.port;
+            document.getElementById('http-endpoint-info').innerHTML =
+                `<p>Send HTTP requests to:</p>` +
+                `<code>POST http://${localIp}:${flaskPort}/send_osc</code>` +
+                `<pre>{"address": "/osc/address", "args": [1, 2, 3]}</pre>` +
+                `<code>GET http://${localIp}:${flaskPort}/send_osc</code>` +
+                `<pre>?address=/osc/address&amp;arg1=value1&amp;arg2=value2</pre>`;
+
+            // TCP listeners
+            const tcpListeners = [];
+            const udpListeners = [];
+            (config.connections || []).forEach(conn => {
+                if (conn.from.protocol === 'tcp' && conn.from.listen_port) {
+                    tcpListeners.push(conn);
+                } else if (conn.from.protocol === 'udp' && conn.from.listen_port) {
+                    udpListeners.push(conn);
+                }
+            });
+
+            const tcpCard = document.getElementById('tcp-listeners-card');
+            const tcpList = document.getElementById('tcp-listeners-list');
+            if (tcpListeners.length > 0) {
+                tcpCard.style.display = '';
+                tcpList.innerHTML = tcpListeners.map(conn => {
+                    const port = conn.from.listen_port;
+                    const name = conn.name ? ` <span style="color:var(--text-secondary);">(${conn.name})</span>` : '';
+                    return `<div class="endpoint-info">` +
+                        `<p>Send TCP data to:${name}</p>` +
+                        `<code>${localIp}:${port}</code>` +
+                        `<pre>{"address": "/osc/address", "args": [1, 2, 3]}</pre>` +
+                        `</div>`;
+                }).join('');
+            } else {
+                tcpCard.style.display = 'none';
+            }
+
+            const udpCard = document.getElementById('udp-listeners-card');
+            const udpList = document.getElementById('udp-listeners-list');
+            if (udpListeners.length > 0) {
+                udpCard.style.display = '';
+                udpList.innerHTML = udpListeners.map(conn => {
+                    const port = conn.from.listen_port;
+                    const name = conn.name ? ` <span style="color:var(--text-secondary);">(${conn.name})</span>` : '';
+                    return `<div class="endpoint-info">` +
+                        `<p>Send UDP data to:${name}</p>` +
+                        `<code>${localIp}:${port}</code>` +
+                        `<pre>{"address": "/osc/address", "args": [1, 2, 3]}</pre>` +
+                        `</div>`;
+                }).join('');
+            } else {
+                udpCard.style.display = 'none';
+            }
         }
 
         // =====================
