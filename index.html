@@ -812,6 +812,11 @@
                         </div>
                     </div>
 
+                    <div id="request-preview" style="display:none; margin-top:1rem;">
+                        <label class="label" style="font-size:0.85rem;">Request preview</label>
+                        <pre style="background:var(--bg-card-nested); color:var(--text-primary); padding:0.75rem 1rem; border-radius:6px; border:1px solid var(--border-color); font-size:0.82rem; white-space:pre-wrap; word-break:break-all; margin:0;"><code id="request-preview-content"></code></pre>
+                    </div>
+
                     <div class="field is-grouped">
                         <button class="button is-primary" id="form-submit-btn" onclick="submitConnection()">Add</button>
                         <button class="button" onclick="closeConnectionForm()">Cancel</button>
@@ -976,7 +981,10 @@
             const label = to.name ? `<strong>${to.name}</strong><br>` : '';
             const tag = protoTag(to.protocol);
             if (to.protocol === 'http') {
-                let s = `${tag} <code>${to.url || ''}</code>`;
+                let s = `${tag} <small>${to.method || 'POST'}</small> <code>${to.url || ''}</code>`;
+                if (to.params && Object.keys(to.params).length > 0) {
+                    s += ` <small>[${Object.keys(to.params).join(', ')}]</small>`;
+                }
                 if (conn && conn.response_to_osc && conn.response_to_osc.enabled) {
                     s += ` <span class="proto-tag proto-tag-osc" style="font-size:0.65rem; margin-left:0.4rem;" title="Response forwarded as OSC to ${conn.response_to_osc.ip}:${conn.response_to_osc.port} ${conn.response_to_osc.address}">↩ OSC</span>`;
                 }
@@ -1103,7 +1111,13 @@
                 document.getElementById('to_ip').value = conn.to.ip || '';
                 document.getElementById('to_port').value = conn.to.port || '';
             } else if (conn.to.protocol === 'http') {
+                document.getElementById('to_http_method').value = conn.to.method || 'POST';
+                toggleParamsSection();
                 document.getElementById('to_url').value = conn.to.url || '';
+                // Fill params fields if present
+                if (conn.to.params) {
+                    Object.entries(conn.to.params).forEach(([k, v]) => addParamField(k, v));
+                }
                 // Fill response_to_osc fields if present
                 if (conn.response_to_osc) {
                     const cb = document.getElementById('to_response_enabled');
@@ -1118,6 +1132,7 @@
             }
 
             document.getElementById('add-connection-form').style.display = 'block';
+            updateRequestPreview();
         }
 
         function updateFromFields() {
@@ -1132,7 +1147,7 @@
                         <input id="from_address_pattern" class="input" type="text" placeholder="/pattern">
                     </div>
                     <div class="field">
-                        <label class="label">Values</label>
+                        <label class="label">Values <span style="font-weight:normal; color:var(--text-secondary); font-size:0.85em;">(received from OSC)</span></label>
                         <div id="from-values-list"></div>
                         <button class="button is-link is-small mt-2" type="button" onclick="addValueField()"><i class="fas fa-plus" style="margin-right:0.3rem;"></i>Add value</button>
                     </div>`;
@@ -1153,6 +1168,7 @@
                         <input id="from_listen_port" class="input" type="number" placeholder="5001">
                     </div>`;
             }
+            updateRequestPreview();
         }
 
         function addValueField(prefill) {
@@ -1164,9 +1180,10 @@
                     <input class="input value-input" type="text" placeholder="ValueName" value="${prefill || ''}">
                 </div>
                 <div class="control">
-                    <button class="button is-danger btn-icon" type="button" onclick="this.closest('.field').remove()">&#215;</button>
+                    <button class="button is-danger btn-icon" type="button" onclick="this.closest('.field').remove(); updateRequestPreview()">&#215;</button>
                 </div>`;
             list.appendChild(div);
+            updateRequestPreview();
         }
 
         function updateToFields() {
@@ -1201,8 +1218,24 @@
             } else if (protocol === 'http') {
                 container.innerHTML = `
                     <div class="field">
+                        <label class="label">Method</label>
+                        <div class="select is-fullwidth">
+                            <select id="to_http_method" onchange="toggleParamsSection()">
+                                <option value="POST">POST (JSON body)</option>
+                                <option value="GET">GET (query params)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="field">
                         <label class="label">URL</label>
                         <input id="to_url" class="input" type="text" placeholder="https://example.com/api">
+                    </div>
+                    <div id="get-params-section" style="display:none;">
+                        <div class="field">
+                            <label class="label">Additional Query Parameters</label>
+                            <div id="to-params-list"></div>
+                            <button class="button is-link is-small mt-2" type="button" onclick="addParamField()"><i class="fas fa-plus" style="margin-right:0.3rem;"></i>Add parameter</button>
+                        </div>
                     </div>
                     <div class="field mt-4">
                         <label class="label" style="cursor:pointer;">
@@ -1225,6 +1258,7 @@
                         </div>
                     </div>`;
             }
+            updateRequestPreview();
         }
 
         function toggleResponseFields() {
@@ -1233,6 +1267,117 @@
             if (cb && fields) {
                 fields.style.display = cb.checked ? 'block' : 'none';
             }
+        }
+
+        function toggleParamsSection() {
+            const method = document.getElementById('to_http_method');
+            const section = document.getElementById('get-params-section');
+            if (method && section) {
+                section.style.display = method.value === 'GET' ? 'block' : 'none';
+            }
+            updateRequestPreview();
+        }
+
+        function addParamField(key, value) {
+            const list = document.getElementById('to-params-list');
+            const div = document.createElement('div');
+            div.className = 'field has-addons mb-1';
+            div.innerHTML = `
+                <div class="control">
+                    <input class="input param-key" type="text" placeholder="key" value="${key || ''}" style="width:140px;">
+                </div>
+                <div class="control is-expanded">
+                    <input class="input param-value" type="text" placeholder="value" value="${value || ''}">
+                </div>
+                <div class="control">
+                    <button class="button is-danger btn-icon" type="button" onclick="this.closest('.field').remove(); updateRequestPreview()">&#215;</button>
+                </div>`;
+            list.appendChild(div);
+            updateRequestPreview();
+        }
+
+        function updateRequestPreview() {
+            const previewBox = document.getElementById('request-preview');
+            const previewContent = document.getElementById('request-preview-content');
+            if (!previewBox || !previewContent) return;
+
+            const toProtocol = document.getElementById('conn_to_protocol').value;
+            const fromProtocol = document.getElementById('conn_from_protocol').value;
+
+            // Hide preview for OSC destination or when no destination selected
+            if (!toProtocol || toProtocol === 'osc') {
+                previewBox.style.display = 'none';
+                return;
+            }
+
+            // Gather values from source (OSC from.values)
+            const valueNames = [];
+            const valueInputs = document.querySelectorAll('#from-values-list .value-input');
+            valueInputs.forEach(input => {
+                const v = input.value.trim();
+                if (v) valueNames.push(v);
+            });
+
+            // Gather from address pattern
+            const patternEl = document.getElementById('from_address_pattern');
+            const pattern = patternEl ? patternEl.value.trim() || '/pattern' : '/pattern';
+
+            let preview = '';
+
+            if (toProtocol === 'http') {
+                const methodEl = document.getElementById('to_http_method');
+                const method = methodEl ? methodEl.value : 'POST';
+                const urlEl = document.getElementById('to_url');
+                const url = urlEl ? urlEl.value.trim() || '<url>' : '<url>';
+
+                if (method === 'GET') {
+                    // Gather static params
+                    const params = [];
+                    document.querySelectorAll('#to-params-list .field').forEach(row => {
+                        const k = row.querySelector('.param-key')?.value.trim();
+                        const v = row.querySelector('.param-value')?.value.trim();
+                        if (k) params.push(k + '=' + (v || ''));
+                    });
+                    // Add dynamic placeholders from values
+                    valueNames.forEach(name => params.push(name + '=<' + name + '>'));
+                    // If no params and no values, show default
+                    if (params.length === 0 && fromProtocol === 'osc') {
+                        params.push('address=' + pattern);
+                        params.push('args=<arg1>,<arg2>');
+                    }
+                    const qs = params.length ? '?' + params.join('&') : '';
+                    preview = 'GET ' + url + qs;
+                } else {
+                    // POST
+                    let body;
+                    if (valueNames.length > 0) {
+                        const argsObj = {};
+                        valueNames.forEach(name => argsObj[name] = '<' + name + '>');
+                        body = { address: pattern, args: argsObj };
+                    } else {
+                        body = { address: pattern, args: ['<arg1>', '<arg2>'] };
+                    }
+                    preview = 'POST ' + url + '\n' + JSON.stringify(body, null, 2);
+                }
+            } else if (toProtocol === 'tcp' || toProtocol === 'udp') {
+                const ipEl = document.getElementById('to_ip');
+                const portEl = document.getElementById('to_port');
+                const ip = ipEl ? ipEl.value.trim() || '<ip>' : '<ip>';
+                const port = portEl ? portEl.value.trim() || '<port>' : '<port>';
+                const label = toProtocol.toUpperCase() + ' ' + ip + ':' + port;
+
+                let payload;
+                if (valueNames.length > 0) {
+                    payload = {};
+                    valueNames.forEach(name => payload[name] = '<' + name + '>');
+                } else {
+                    payload = { address: pattern, args: ['<arg1>', '<arg2>'] };
+                }
+                preview = label + '\n' + JSON.stringify(payload, null, 2);
+            }
+
+            previewContent.textContent = preview;
+            previewBox.style.display = preview ? 'block' : 'none';
         }
 
         function buildConnectionFromForm() {
@@ -1277,7 +1422,18 @@
                 connTo.ip = document.getElementById('to_ip').value;
                 connTo.port = parseInt(document.getElementById('to_port').value) || 0;
             } else if (toProtocol === 'http') {
+                connTo.method = document.getElementById('to_http_method').value;
                 connTo.url = document.getElementById('to_url').value;
+                if (connTo.method === 'GET') {
+                    const keys = document.querySelectorAll('#to-params-list .param-key');
+                    const vals = document.querySelectorAll('#to-params-list .param-value');
+                    const params = {};
+                    keys.forEach((k, i) => {
+                        const key = k.value.trim();
+                        if (key) params[key] = vals[i] ? vals[i].value : '';
+                    });
+                    if (Object.keys(params).length > 0) connTo.params = params;
+                }
             }
 
             // Auto-generate name if empty
@@ -1387,6 +1543,11 @@
         window.onload = function () {
             fetchConfig();
             fetchLocalIP();
+            const connForm = document.getElementById('add-connection-form');
+            if (connForm) {
+                connForm.addEventListener('input', updateRequestPreview);
+                connForm.addEventListener('change', updateRequestPreview);
+            }
         };
     </script>
 </body>
