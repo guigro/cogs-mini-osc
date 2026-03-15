@@ -694,6 +694,59 @@
                 max-width: calc(100vw - 2.5rem);
             }
         }
+
+        /* ========================================
+           Ignore Rules — Query Builder
+           ======================================== */
+        .ignore-group {
+            border-left: 3px solid var(--accent);
+            padding: 0.75rem;
+            padding-left: 1rem;
+            margin: 0.5rem 0;
+            border-radius: 4px;
+            background: var(--bg-card-nested);
+        }
+        .ignore-group.group-or {
+            border-left-color: var(--color-warning);
+        }
+        .ignore-group .ignore-group {
+            margin-left: 0.5rem;
+        }
+        .ignore-group-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .ignore-group-header .select select {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .ignore-condition-row {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-bottom: 0.4rem;
+            flex-wrap: wrap;
+        }
+        .ignore-condition-row .select, .ignore-condition-row .input {
+            font-size: 0.85rem;
+        }
+        .ignore-condition-row .select select {
+            min-width: 120px;
+        }
+        .ignore-condition-row .input {
+            max-width: 200px;
+        }
+        .ignore-summary {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     </style>
 </head>
 
@@ -725,6 +778,7 @@
                 <ul>
                     <li class="is-active" id="tab-servers" onclick="showTab('servers')"><a><i class="fas fa-server" style="margin-right:0.4rem;"></i>Servers</a></li>
                     <li id="tab-connections" onclick="showTab('connections')"><a><i class="fas fa-exchange-alt" style="margin-right:0.4rem;"></i>Connections</a></li>
+                    <li id="tab-ignore" onclick="showTab('ignore')"><a><i class="fas fa-ban" style="margin-right:0.4rem;"></i>Ignore</a></li>
                     <li id="tab-logs" onclick="showTab('logs')"><a><i class="fas fa-terminal" style="margin-right:0.4rem;"></i>Logs</a></li>
                 </ul>
             </div>
@@ -872,6 +926,45 @@
                 </div>
             </div>
 
+            <!-- Ignore Rules -->
+            <div id="content-ignore" class="box is-hidden">
+                <h2 class="title is-4">Ignore Rules</h2>
+                <p class="mb-4" style="color:var(--text-secondary);">Filter out messages matching these rules. Rules are checked on both source and destination.</p>
+                <table class="table is-fullwidth">
+                    <thead>
+                        <tr>
+                            <th style="width:50px;">On</th>
+                            <th>Name</th>
+                            <th>Conditions</th>
+                            <th style="width:50px;">Log</th>
+                            <th style="width:100px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ignore-rules-list"></tbody>
+                </table>
+                <button class="button is-success" onclick="openIgnoreRuleForm()"><i class="fas fa-plus" style="margin-right:0.4rem;"></i>Add Rule</button>
+                <div id="ignore-rule-form" style="display:none;" class="box mt-4">
+                    <h3 id="ignore-form-title" class="title is-5">Add Ignore Rule</h3>
+                    <div class="field">
+                        <label class="label">Rule Name</label>
+                        <input id="ignore_rule_name" class="input" type="text" placeholder="e.g. Block heartbeat">
+                    </div>
+                    <div class="field">
+                        <label class="label" style="cursor:pointer;">
+                            <input type="checkbox" id="ignore_log_matches"> Log when matched
+                        </label>
+                    </div>
+                    <div class="field">
+                        <label class="label">Conditions</label>
+                        <div id="ignore-root-group"></div>
+                    </div>
+                    <div class="field is-grouped">
+                        <button class="button is-primary" id="ignore-form-submit-btn" onclick="submitIgnoreRule()">Add</button>
+                        <button class="button" onclick="closeIgnoreRuleForm()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Logs -->
             <div id="content-logs" class="box is-hidden">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
@@ -947,7 +1040,7 @@
         // Tab navigation
         // =====================
         function showTab(tab) {
-            const tabs = ['servers', 'connections', 'logs'];
+            const tabs = ['servers', 'connections', 'ignore', 'logs'];
             tabs.forEach(t => {
                 document.getElementById(`content-${t}`).classList.add('is-hidden');
                 document.getElementById(`tab-${t}`).classList.remove('is-active');
@@ -970,6 +1063,7 @@
                 document.getElementById('flask_ip').value = config.flask_server.ip;
                 document.getElementById('flask_port').value = config.flask_server.port;
                 fetchConnections();
+                fetchIgnoreRules();
                 updateServerEndpoints();
             });
         }
@@ -1660,6 +1754,256 @@
             } else {
                 udpCard.style.display = 'none';
             }
+        }
+
+        // =====================
+        // Ignore Rules
+        // =====================
+        let ignoreRulesCache = [];
+        let ignoreEditingIndex = null;
+
+        function fetchIgnoreRules() {
+            fetch('/get_config').then(res => res.json()).then(config => {
+                ignoreRulesCache = config.ignore_rules || [];
+                const table = document.getElementById('ignore-rules-list');
+                table.innerHTML = '';
+                ignoreRulesCache.forEach((rule, i) => {
+                    table.innerHTML += `<tr>
+                        <td><input type="checkbox" ${rule.enabled ? 'checked' : ''} onchange="toggleIgnoreRule(${i}, 'enabled', this.checked)"></td>
+                        <td><strong>${rule.name || ''}</strong></td>
+                        <td><span class="ignore-summary">${summarizeConditionGroup(rule.condition_group)}</span></td>
+                        <td><input type="checkbox" ${rule.log_matches ? 'checked' : ''} onchange="toggleIgnoreRule(${i}, 'log_matches', this.checked)" title="Log matches"></td>
+                        <td style="white-space:nowrap;">
+                            <button class='button is-info is-small btn-icon mr-1' onclick='editIgnoreRule(${i})' title='Edit'><i class='fas fa-pen'></i></button>
+                            <button class='button is-danger is-small btn-icon' onclick='deleteIgnoreRule(${i})' title='Delete'><i class='fas fa-trash-alt'></i></button>
+                        </td>
+                    </tr>`;
+                });
+            });
+        }
+
+        function toggleIgnoreRule(index, field, value) {
+            const body = { index };
+            body[field] = value;
+            fetch('/toggle_ignore_rule', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            }).then(res => {
+                if (!res.ok) throw new Error("Failed");
+                return res.json();
+            }).then(() => {
+                showToast("Rule updated", "success");
+                fetchIgnoreRules();
+            }).catch(err => showToast("Error: " + err.message, "error"));
+        }
+
+        function deleteIgnoreRule(index) {
+            if (!confirm("Delete this ignore rule?")) return;
+            fetch('/remove_ignore_rule', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ index })
+            }).then(res => {
+                if (!res.ok) throw new Error("Failed");
+                return res.json();
+            }).then(() => {
+                showToast("Rule deleted", "success");
+                fetchIgnoreRules();
+            }).catch(err => showToast("Error: " + err.message, "error"));
+        }
+
+        function summarizeConditionGroup(group) {
+            if (!group || !group.conditions || group.conditions.length === 0) return '<em>No conditions</em>';
+            const parts = group.conditions.map(item => {
+                if (item.type === 'group') {
+                    return '(' + summarizeConditionGroup(item) + ')';
+                }
+                return `${item.field || '?'} ${item.op || '?'} "${item.value || ''}"`;
+            });
+            return parts.join(` <strong>${group.operator || 'AND'}</strong> `);
+        }
+
+        // Query Builder
+        function renderGroup(container, groupData, isRoot) {
+            const div = document.createElement('div');
+            const op = (groupData && groupData.operator) || 'AND';
+            div.className = 'ignore-group' + (op === 'OR' ? ' group-or' : '');
+            div.dataset.operator = op;
+
+            const header = document.createElement('div');
+            header.className = 'ignore-group-header';
+            header.innerHTML = `
+                <div class="select is-small">
+                    <select onchange="this.closest('.ignore-group').dataset.operator=this.value; this.closest('.ignore-group').className='ignore-group'+(this.value==='OR'?' group-or':'');">
+                        <option value="AND" ${op === 'AND' ? 'selected' : ''}>AND</option>
+                        <option value="OR" ${op === 'OR' ? 'selected' : ''}>OR</option>
+                    </select>
+                </div>
+                <button class="button is-small is-link is-light" type="button" onclick="addConditionRow(this.closest('.ignore-group'))"><i class="fas fa-plus" style="margin-right:0.3rem;"></i>Condition</button>
+                <button class="button is-small is-info is-light" type="button" onclick="addNestedGroup(this.closest('.ignore-group'))"><i class="fas fa-layer-group" style="margin-right:0.3rem;"></i>Group</button>
+                ${!isRoot ? '<button class="button is-small is-danger is-light" type="button" onclick="this.closest(&quot;.ignore-group&quot;).remove()"><i class="fas fa-times"></i></button>' : ''}
+            `;
+            div.appendChild(header);
+
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'ignore-group-children';
+            div.appendChild(childrenContainer);
+
+            // Populate from data
+            if (groupData && groupData.conditions) {
+                groupData.conditions.forEach(item => {
+                    if (item.type === 'group') {
+                        renderGroup(childrenContainer, item, false);
+                    } else {
+                        addConditionRow(div, item);
+                    }
+                });
+            }
+
+            container.appendChild(div);
+        }
+
+        const IGNORE_FIELDS = [
+            { value: 'source.protocol', label: 'Source Protocol' },
+            { value: 'source.ip', label: 'Source IP' },
+            { value: 'source.port', label: 'Source Port' },
+            { value: 'source.osc_address', label: 'OSC Address' },
+            { value: 'source.http_endpoint', label: 'HTTP Endpoint' },
+            { value: 'dest.protocol', label: 'Dest Protocol' },
+            { value: 'dest.ip', label: 'Dest IP' },
+            { value: 'dest.port', label: 'Dest Port' },
+            { value: 'content.args', label: 'Args (JSON)' },
+            { value: 'content.raw', label: 'Full Message (address + args)' }
+        ];
+
+        const IGNORE_OPS = [
+            'EXACT', 'NOT_EXACT', 'CONTAINS', 'NOT_CONTAINS',
+            'STARTS_WITH', 'ENDS_WITH', 'REGEX', 'EXISTS', 'NOT_EXISTS'
+        ];
+
+        function addConditionRow(groupEl, data) {
+            const children = groupEl.querySelector('.ignore-group-children');
+            const row = document.createElement('div');
+            row.className = 'ignore-condition-row';
+
+            const fieldOpts = IGNORE_FIELDS.map(f =>
+                `<option value="${f.value}" ${data && data.field === f.value ? 'selected' : ''}>${f.label}</option>`
+            ).join('');
+
+            const opOpts = IGNORE_OPS.map(o =>
+                `<option value="${o}" ${data && data.op === o ? 'selected' : ''}>${o}</option>`
+            ).join('');
+
+            const val = (data && data.value) || '';
+            const opVal = (data && data.op) || 'EXACT';
+            const hideValue = opVal === 'EXISTS' || opVal === 'NOT_EXISTS';
+
+            row.innerHTML = `
+                <div class="select is-small">
+                    <select class="cond-field">${fieldOpts}</select>
+                </div>
+                <div class="select is-small">
+                    <select class="cond-op" onchange="this.closest('.ignore-condition-row').querySelector('.cond-value').style.display=(this.value==='EXISTS'||this.value==='NOT_EXISTS')?'none':'';">${opOpts}</select>
+                </div>
+                <input class="input is-small cond-value" type="text" placeholder="value" value="${val}" style="${hideValue ? 'display:none;' : ''}">
+                <button class="button is-small is-danger is-light" type="button" onclick="this.closest('.ignore-condition-row').remove()"><i class="fas fa-times"></i></button>
+            `;
+            children.appendChild(row);
+        }
+
+        function addNestedGroup(groupEl) {
+            const children = groupEl.querySelector('.ignore-group-children');
+            renderGroup(children, { operator: 'AND', conditions: [] }, false);
+        }
+
+        function serializeGroup(groupEl) {
+            const operator = groupEl.dataset.operator || 'AND';
+            const conditions = [];
+            const children = groupEl.querySelector('.ignore-group-children');
+            if (!children) return { operator, conditions };
+
+            children.childNodes.forEach(child => {
+                if (child.classList && child.classList.contains('ignore-group')) {
+                    const sub = serializeGroup(child);
+                    conditions.push({ type: 'group', ...sub });
+                } else if (child.classList && child.classList.contains('ignore-condition-row')) {
+                    const field = child.querySelector('.cond-field').value;
+                    const op = child.querySelector('.cond-op').value;
+                    const value = child.querySelector('.cond-value').value;
+                    conditions.push({ type: 'condition', field, op, value });
+                }
+            });
+            return { operator, conditions };
+        }
+
+        function openIgnoreRuleForm() {
+            ignoreEditingIndex = null;
+            document.getElementById('ignore-form-title').textContent = 'Add Ignore Rule';
+            document.getElementById('ignore-form-submit-btn').textContent = 'Add';
+            document.getElementById('ignore_rule_name').value = '';
+            document.getElementById('ignore_log_matches').checked = false;
+            const root = document.getElementById('ignore-root-group');
+            root.innerHTML = '';
+            renderGroup(root, { operator: 'AND', conditions: [] }, true);
+            document.getElementById('ignore-rule-form').style.display = 'block';
+        }
+
+        function closeIgnoreRuleForm() {
+            document.getElementById('ignore-rule-form').style.display = 'none';
+            ignoreEditingIndex = null;
+        }
+
+        function editIgnoreRule(index) {
+            const rule = ignoreRulesCache[index];
+            if (!rule) return;
+            ignoreEditingIndex = index;
+            document.getElementById('ignore-form-title').textContent = 'Edit Ignore Rule';
+            document.getElementById('ignore-form-submit-btn').textContent = 'Save';
+            document.getElementById('ignore_rule_name').value = rule.name || '';
+            document.getElementById('ignore_log_matches').checked = !!rule.log_matches;
+            const root = document.getElementById('ignore-root-group');
+            root.innerHTML = '';
+            renderGroup(root, rule.condition_group || { operator: 'AND', conditions: [] }, true);
+            document.getElementById('ignore-rule-form').style.display = 'block';
+        }
+
+        function submitIgnoreRule() {
+            const name = document.getElementById('ignore_rule_name').value.trim();
+            if (!name) {
+                showToast("Please enter a rule name.", "warning");
+                return;
+            }
+            const rootGroup = document.getElementById('ignore-root-group').querySelector('.ignore-group');
+            const condition_group = rootGroup ? serializeGroup(rootGroup) : { operator: 'AND', conditions: [] };
+
+            const payload = {
+                name,
+                enabled: true,
+                log_matches: document.getElementById('ignore_log_matches').checked,
+                condition_group
+            };
+
+            let url;
+            if (ignoreEditingIndex !== null) {
+                url = '/update_ignore_rule';
+                payload.index = ignoreEditingIndex;
+            } else {
+                url = '/add_ignore_rule';
+            }
+
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(res => {
+                if (!res.ok) throw new Error("Failed to save rule");
+                return res.json();
+            }).then(() => {
+                showToast(ignoreEditingIndex !== null ? "Rule updated!" : "Rule added!", "success");
+                fetchIgnoreRules();
+                closeIgnoreRuleForm();
+            }).catch(err => showToast("Error: " + err.message, "error"));
         }
 
         // =====================

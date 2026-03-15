@@ -1,4 +1,5 @@
 import json
+import re
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
@@ -19,6 +20,7 @@ config = None
 targets_dict = {}
 routes = []
 logs = []
+ignore_rules = []
 
 ########################################
 # Chargement et validation de la config
@@ -88,7 +90,7 @@ def migrate_config(cfg):
 
 def expand_connections(cfg):
     """Convert connections[] to internal targets_dict + routes[] for the routing engine."""
-    global targets_dict, routes
+    global targets_dict, routes, ignore_rules
     targets_dict = {}
     routes = []
 
@@ -130,6 +132,8 @@ def expand_connections(cfg):
         if "response_to_osc" in conn:
             route["response_to_osc"] = conn["response_to_osc"]
         routes.append(route)
+
+    ignore_rules = cfg.get("ignore_rules", [])
 
 
 def load_config(filename):
@@ -241,6 +245,73 @@ def remove_connection():
         return jsonify({"status": "success"})
     return jsonify({"status": "error", "message": "Invalid index"}), 400
 
+@app.route('/add_ignore_rule', methods=['POST'])
+def add_ignore_rule():
+    data = request.json
+    new_rule = {
+        "name": data.get("name", ""),
+        "enabled": data.get("enabled", True),
+        "log_matches": data.get("log_matches", False),
+        "condition_group": data.get("condition_group", {"operator": "AND", "conditions": []})
+    }
+    config = load_config(CONFIG_FILE)
+    if "ignore_rules" not in config:
+        config["ignore_rules"] = []
+    config["ignore_rules"].append(new_rule)
+    save_config(config)
+    expand_connections(config)
+    return jsonify({"status": "success"})
+
+@app.route('/update_ignore_rule', methods=['POST'])
+def update_ignore_rule():
+    data = request.json
+    index = int(data['index'])
+    config = load_config(CONFIG_FILE)
+    rules = config.get("ignore_rules", [])
+    if 0 <= index < len(rules):
+        rules[index] = {
+            "name": data.get("name", ""),
+            "enabled": data.get("enabled", True),
+            "log_matches": data.get("log_matches", False),
+            "condition_group": data.get("condition_group", {"operator": "AND", "conditions": []})
+        }
+        config["ignore_rules"] = rules
+        save_config(config)
+        expand_connections(config)
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Invalid index"}), 400
+
+@app.route('/remove_ignore_rule', methods=['POST'])
+def remove_ignore_rule():
+    data = request.json
+    index = int(data['index'])
+    config = load_config(CONFIG_FILE)
+    rules = config.get("ignore_rules", [])
+    if 0 <= index < len(rules):
+        del rules[index]
+        config["ignore_rules"] = rules
+        save_config(config)
+        expand_connections(config)
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Invalid index"}), 400
+
+@app.route('/toggle_ignore_rule', methods=['POST'])
+def toggle_ignore_rule():
+    data = request.json
+    index = int(data['index'])
+    config = load_config(CONFIG_FILE)
+    rules = config.get("ignore_rules", [])
+    if 0 <= index < len(rules):
+        if "enabled" in data:
+            rules[index]["enabled"] = data["enabled"]
+        if "log_matches" in data:
+            rules[index]["log_matches"] = data["log_matches"]
+        config["ignore_rules"] = rules
+        save_config(config)
+        expand_connections(config)
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Invalid index"}), 400
+
 @app.route('/get_logs', methods=['GET'])
 def get_logs():
     return jsonify(logs)
@@ -291,7 +362,9 @@ def http_endpoint():
 
     # Appeler handle_incoming_non_osc
     try:
-        handle_incoming_non_osc("http", data, {"endpoint": "/send_osc"})
+        result = handle_incoming_non_osc("http", data, {"endpoint": "/send_osc"})
+        if result == "ignored":
+            return jsonify({"status": "Message ignored by rule", "address": osc_address, "args": osc_args_list}), 200
         return jsonify({"status": "Message routed", "address": osc_address, "args": osc_args_list}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -405,7 +478,90 @@ def handle_osc_out(target_name, address, args):
 # Gestion des messages entrants
 ########################################
 
+def evaluate_condition(condition, context):
+    """Evaluate a single condition against a context dict."""
+    field = condition.get("field", "")
+    op = condition.get("op", "EXACT")
+    value = condition.get("value", "")
+
+    actual = context.get(field)
+    if op == "EXISTS":
+        return actual is not None
+    if op == "NOT_EXISTS":
+        return actual is None
+    if actual is None:
+        return False
+
+    actual_str = str(actual)
+    if op == "EXACT":
+        return actual_str == value
+    elif op == "NOT_EXACT":
+        return actual_str != value
+    elif op == "CONTAINS":
+        return value in actual_str
+    elif op == "NOT_CONTAINS":
+        return value not in actual_str
+    elif op == "STARTS_WITH":
+        return actual_str.startswith(value)
+    elif op == "ENDS_WITH":
+        return actual_str.endswith(value)
+    elif op == "REGEX":
+        try:
+            return bool(re.search(value, actual_str))
+        except re.error:
+            return False
+    return False
+
+
+def evaluate_group(group, context):
+    """Recursively evaluate a condition group (AND/OR) against a context dict."""
+    operator = group.get("operator", "AND")
+    conditions = group.get("conditions", [])
+
+    if not conditions:
+        return False
+
+    for item in conditions:
+        if item.get("type") == "group":
+            result = evaluate_group(item, context)
+        else:
+            result = evaluate_condition(item, context)
+
+        if operator == "OR" and result:
+            return True
+        if operator == "AND" and not result:
+            return False
+
+    return operator == "AND"
+
+
+def should_ignore(context):
+    """Check all enabled ignore rules against the context. Return True if message should be ignored."""
+    for rule in ignore_rules:
+        if not rule.get("enabled", True):
+            continue
+        group = rule.get("condition_group")
+        if group and evaluate_group(group, context):
+            if rule.get("log_matches", False):
+                msg = f"[IGNORE] Rule '{rule.get('name', 'unnamed')}' matched"
+                print(msg)
+                add_log(msg)
+            return True
+    return False
+
+
 def handle_osc_in_message(address, args):
+    # Source-level ignore check
+    args_str = json.dumps(list(args))
+    source_context = {
+        "source.protocol": "osc",
+        "source.osc_address": address,
+        "content.args": args_str,
+        "content.raw": json.dumps({"address": address, "args": list(args)})
+    }
+    if should_ignore(source_context):
+        return
+
     # On parcourt les routes pour voir si on a une route OSC->X
     for route in routes:
         if route["from"]["protocol"] == "osc":
@@ -417,6 +573,15 @@ def handle_osc_in_message(address, args):
                     print(f"Target {target_name} can't be found")
                     add_log(f"Target {target_name} can't be found")
                     return
+
+                # Destination-level ignore check
+                full_context = {**source_context,
+                    "dest.protocol": target["type"],
+                    "dest.ip": target.get("ip", ""),
+                    "dest.port": str(target.get("port", ""))
+                }
+                if should_ignore(full_context):
+                    continue
 
                 # ----------------------------------------------------------------
                 # Étape : gestion du mapping args -> dictionnaire selon 'values'
@@ -457,8 +622,23 @@ def handle_osc_in_message(address, args):
                 return
 
 def handle_incoming_non_osc(protocol, data, route_filter):
-    # Data est un dict: {"args": [...]}
-    # route_filter contient l'info pour matcher la route (endpoint, ip, port)
+    # Source-level ignore check
+    osc_addr = data.get("address", "")
+    args_str = json.dumps(data.get("args", []))
+    raw_str = json.dumps(data)
+    source_context = {
+        "source.protocol": protocol,
+        "source.osc_address": osc_addr,
+        "content.args": args_str,
+        "content.raw": raw_str
+    }
+    if protocol == "http":
+        source_context["source.http_endpoint"] = route_filter.get("endpoint", "")
+    elif protocol in ["tcp", "udp"]:
+        source_context["source.ip"] = route_filter.get("ip", "")
+        source_context["source.port"] = str(route_filter.get("port", ""))
+    if should_ignore(source_context):
+        return "ignored"
 
     for route in routes:
         if route["from"]["protocol"] == protocol:
@@ -475,6 +655,16 @@ def handle_incoming_non_osc(protocol, data, route_filter):
             if match:
                 # On a trouvé une route non-OSC->OSC
                 target_name = route["to"]["target_name"]
+
+                # Destination-level ignore check
+                target = targets_dict.get(target_name, {})
+                full_context = {**source_context,
+                    "dest.protocol": target.get("type", ""),
+                    "dest.ip": target.get("ip", ""),
+                    "dest.port": str(target.get("port", ""))
+                }
+                if should_ignore(full_context):
+                    continue
 
                 # Priorise l'adresse depuis les données de la requête HTTP
                 address = data.get("address") or route["to"].get("address") or data.get("osc_address")
@@ -591,4 +781,10 @@ if __name__ == "__main__":
             start_udp_server(fr["ip"], fr["port"])
 
     # Lancer le serveur HTTP Flask
-    app.run(host=config["flask_server"]["ip"], port=config["flask_server"]["port"], debug=False)
+    try:
+        print(f"Starting Flask on {config['flask_server']['ip']}:{config['flask_server']['port']}...")
+        app.run(host=config["flask_server"]["ip"], port=config["flask_server"]["port"], debug=False)
+    except Exception as e:
+        print(f"Flask failed to start: {e}")
+        import traceback
+        traceback.print_exc()
