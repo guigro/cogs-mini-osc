@@ -767,10 +767,15 @@
                         <p>Manage connections for network requests in Cogs</p>
                     </div>
                 </div>
-                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">
-                    <i id="theme-icon" class="fas fa-moon"></i>
-                    <span id="theme-label" style="font-size:0.8rem;">Dark</span>
-                </button>
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <button class="theme-toggle" onclick="restartApp()" title="Restart application" style="color:var(--color-danger);">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">
+                        <i id="theme-icon" class="fas fa-moon"></i>
+                        <span id="theme-label" style="font-size:0.8rem;">Dark</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Tabs -->
@@ -819,8 +824,8 @@
                     <button class="button is-primary" onclick="updateFlaskServer()"><i class="fas fa-save" style="margin-right:0.4rem;"></i>Update</button>
                     <div class="endpoint-info" id="http-endpoint-info"></div>
                     <div id="flask-restart" style="display:none;" class="notification is-warning mt-4">
-                        <p>The port has been modified. Relaunch the app manually to apply changes.</p>
-                        <a id="new-url" class="button is-primary mt-2" target="_blank">Go to the new URL</a>
+                        <p>The IP or port has been modified. Use the <strong>Restart Application</strong> button below to apply changes.</p>
+                        <a id="new-url" class="button is-primary mt-2" target="_blank">Go to the new URL after restart</a>
                     </div>
                 </div>
                 <!-- TCP Listeners (shown dynamically) -->
@@ -975,6 +980,53 @@
                     <button class="button is-danger btn-icon" onclick="clearLogs()" title="Clear logs"><i class="fas fa-trash-alt" style="margin-right:0.3rem;"></i>Clear</button>
                 </div>
                 <div id="logs" class="log-terminal">Loading logs...</div>
+
+                <!-- File Logging Configuration -->
+                <div class="box mt-4" style="border-left: 4px solid var(--color-info);">
+                    <div style="display:flex; align-items:center; justify-content:space-between;">
+                        <h3 class="title is-5" style="margin-bottom:0 !important;">
+                            <i class="fas fa-file-alt" style="margin-right:0.5rem; color:var(--color-info);"></i>File Logging
+                        </h3>
+                        <div>
+                            <label class="checkbox" style="color:var(--text-secondary);">
+                                <input type="checkbox" id="file_logging_enabled" onchange="updateFileLogging()"> Enable
+                            </label>
+                        </div>
+                    </div>
+                    <p style="color:var(--text-secondary); margin:0.75rem 0;">
+                        When enabled, all messages are saved to daily log files in the <code>logs/</code> directory with automatic rotation.
+                    </p>
+                    <div id="file-logging-settings" style="display:none;">
+                        <div class="columns">
+                            <div class="column is-half">
+                                <div class="field">
+                                    <label class="label">Retention (days)</label>
+                                    <input id="file_logging_retention" class="input" type="number" value="7" min="1" max="90">
+                                </div>
+                            </div>
+                            <div class="column is-half">
+                                <div class="field">
+                                    <label class="label">Minimum Log Level</label>
+                                    <div class="select is-fullwidth">
+                                        <select id="file_logging_level">
+                                            <option value="DEBUG">DEBUG (all messages)</option>
+                                            <option value="INFO" selected>INFO</option>
+                                            <option value="WARNING">WARNING</option>
+                                            <option value="ERROR">ERROR</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <button class="button is-info" onclick="updateFileLogging()">
+                            <i class="fas fa-save" style="margin-right:0.4rem;"></i>Save Settings
+                        </button>
+                        <div id="file-logging-files" class="mt-3" style="display:none;">
+                            <p style="color:var(--text-secondary); font-size:0.85rem;"><strong>Log files:</strong></p>
+                            <div id="file-logging-files-list" style="font-size:0.85rem; color:var(--text-secondary);"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
@@ -1096,6 +1148,31 @@
                 document.getElementById('new-url').href = newUrl;
                 fetchConfig();
             });
+        }
+
+        // =====================
+        // Restart Application
+        // =====================
+        function restartApp() {
+            if (!confirm('Are you sure you want to restart the application? All connections will be briefly interrupted.')) {
+                return;
+            }
+            showToast("Restarting application...", "warning");
+            function pollUntilReady() {
+                const checkInterval = setInterval(() => {
+                    fetch('/get_config')
+                        .then(res => {
+                            if (res.ok) {
+                                clearInterval(checkInterval);
+                                window.location.reload();
+                            }
+                        })
+                        .catch(() => {});
+                }, 2000);
+            }
+            fetch('/restart', { method: 'POST' })
+                .then(() => pollUntilReady())
+                .catch(() => pollUntilReady());
         }
 
         // =====================
@@ -1677,6 +1754,46 @@
         }
 
         // =====================
+        // File Logging
+        // =====================
+        function fetchFileLoggingStatus() {
+            fetch('/get_file_logging_status')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('file_logging_enabled').checked = data.enabled;
+                    document.getElementById('file_logging_retention').value = data.retention_days || 7;
+                    document.getElementById('file_logging_level').value = data.log_level || 'DEBUG';
+                    document.getElementById('file-logging-settings').style.display = data.enabled ? 'block' : 'none';
+                    if (data.log_files && data.log_files.length > 0) {
+                        document.getElementById('file-logging-files').style.display = 'block';
+                        document.getElementById('file-logging-files-list').innerHTML =
+                            data.log_files.map(f => `<code>${f}</code>`).join(', ');
+                    } else {
+                        document.getElementById('file-logging-files').style.display = 'none';
+                    }
+                })
+                .catch(() => {});
+        }
+
+        function updateFileLogging() {
+            const enabled = document.getElementById('file_logging_enabled').checked;
+            const retention = document.getElementById('file_logging_retention').value;
+            const level = document.getElementById('file_logging_level').value;
+            document.getElementById('file-logging-settings').style.display = enabled ? 'block' : 'none';
+            fetch('/update_file_logging', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled, retention_days: parseInt(retention), log_level: level })
+            })
+            .then(res => res.json())
+            .then(() => {
+                showToast(enabled ? "File logging enabled" : "File logging disabled", "success");
+                fetchFileLoggingStatus();
+            })
+            .catch(err => showToast("Error: " + err, "error"));
+        }
+
+        // =====================
         // Local IP
         // =====================
         function fetchLocalIP() {
@@ -2012,6 +2129,7 @@
         window.onload = function () {
             fetchConfig();
             fetchLocalIP();
+            fetchFileLoggingStatus();
             const connForm = document.getElementById('add-connection-form');
             if (connForm) {
                 connForm.addEventListener('input', updateRequestPreview);

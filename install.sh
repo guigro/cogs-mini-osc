@@ -42,7 +42,7 @@ echo "[OK] Virtual environment activated"
 
 # Install dependencies
 echo "[..] Installing dependencies..."
-pip install -r requirements.txt --quiet
+$PYTHON -m pip install -r requirements.txt --quiet
 echo "[OK] Dependencies installed"
 
 # Check config.json

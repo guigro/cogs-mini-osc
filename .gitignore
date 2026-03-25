@@ -12,6 +12,9 @@ venv/
 .vscode/
 .idea/
 
+# Logs
+logs/
+
 # Claude Code
 CLAUDE.md
 .claude/

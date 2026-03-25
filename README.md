@@ -153,12 +153,70 @@ Three tabs accessible at `http://<ip>:<port>`:
 | **Connections** | Add, edit, delete connections (visual form) |
 | **Logs** | Real-time logs (auto-refresh every 2s) |
 
+## Sending & Receiving Messages
+
+In the examples below, replace `192.168.50.226` and ports with your actual values (shown in the **Servers** tab).
+
+### Send to Mini-OSC (incoming)
+
+#### HTTP
+
+```bash
+# POST with JSON body
+curl -X POST http://192.168.50.226:5000/send_osc \
+  -H "Content-Type: application/json" \
+  -d '{"address": "/my_address", "args": [42, "hello"]}'
+
+# GET with query parameters
+curl "http://192.168.50.226:5000/send_osc?address=/my_address&arg1=42&arg2=hello"
+```
+
+#### OSC
+
+Send a standard OSC message to `192.168.50.226:53000`. Any OSC client works (Cogs, TouchOSC, QLab, custom scripts...).
+
+#### TCP
+
+```bash
+echo '{"address": "/my_address", "args": [1, 2, 3]}' | nc 192.168.50.226 57676
+```
+
+#### UDP
+
+```bash
+echo '{"address": "/my_address", "args": [1, 2, 3]}' | nc -u 192.168.50.226 57677
+```
+
+> For TCP and UDP, the payload is a JSON string with an `address` field (required) and optional extra fields. All non-address fields are flattened into OSC arguments.
+
+### Sent by Mini-OSC (outgoing)
+
+#### OSC (to Cogs)
+
+Standard OSC message on the configured address pattern. Args are sent as positional OSC arguments.
+
+#### HTTP
+
+- **POST** (default): `{"address": "/pattern", "args": [1, 2, 3]}`
+- **GET**: query params built from values mapping, e.g. `?command=scotland-yard-opened`
+
+#### TCP
+
+JSON payload over a raw TCP socket:
+- With `values` mapping: `{"GameID": 42, "Level": 5}` (flat dict, no address wrapper)
+- Without mapping: `{"address": "/pattern", "args": [1, 2, 3]}`
+
+#### UDP
+
+JSON payload over a UDP datagram: `{"address": "/pattern", "args": [1, 2, 3]}`
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET/POST` | `/send_osc` | Send an OSC message (main entry point for HTTP) |
 | `GET` | `/get_config` | Get full configuration |
+| `GET` | `/get_local_ip` | Get detected LAN IP address |
 | `POST` | `/add_connection` | Add a new connection |
 | `POST` | `/update_connection` | Update an existing connection |
 | `POST` | `/remove_connection` | Remove a connection by index |
@@ -166,18 +224,6 @@ Three tabs accessible at `http://<ip>:<port>`:
 | `POST` | `/update_flask_server` | Update Flask server settings |
 | `GET` | `/get_logs` | Get application logs |
 | `POST` | `/clear_logs` | Clear all logs |
-
-### Sending OSC via HTTP
-
-```bash
-# POST with JSON
-curl -X POST http://127.0.0.1:5000/send_osc \
-  -H "Content-Type: application/json" \
-  -d '{"address": "/my_address", "args": [42, "hello"]}'
-
-# GET with query params
-curl "http://127.0.0.1:5000/send_osc?address=/my_address&arg1=42&arg2=hello"
-```
 
 ## Usage with Cogs
 

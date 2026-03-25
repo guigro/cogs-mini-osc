@@ -5,7 +5,7 @@
     },
     "flask_server": {
         "ip": "127.0.0.1",
-        "port": 5000
+        "port": 5009
     },
     "connections": [
         {
@@ -16,7 +16,7 @@
             },
             "to": {
                 "protocol": "osc",
-                "ip": "127.0.0.1",
+                "ip": "192.168.50.226",
                 "port": 12097
             }
         },
@@ -78,6 +78,46 @@
                 "port": 12097,
                 "address": "/api_response"
             }
+        },
+        {
+            "name": "Cogs to PC",
+            "from": {
+                "protocol": "osc",
+                "name": "Cogs",
+                "address_pattern": "/pc",
+                "values": [
+                    "command"
+                ]
+            },
+            "to": {
+                "protocol": "http",
+                "name": "PC",
+                "method": "GET",
+                "url": "http://localhost:3000/api/command"
+            }
         }
-    ]
+    ],
+    "ignore_rules": [
+        {
+            "name": "Block heartbeat",
+            "enabled": true,
+            "log_matches": false,
+            "condition_group": {
+                "operator": "AND",
+                "conditions": [
+                    {
+                        "type": "condition",
+                        "field": "content.raw",
+                        "op": "CONTAINS",
+                        "value": "heartbeat"
+                    }
+                ]
+            }
+        }
+    ],
+    "file_logging": {
+        "enabled": false,
+        "retention_days": 7,
+        "log_level": "DEBUG"
+    }
 }

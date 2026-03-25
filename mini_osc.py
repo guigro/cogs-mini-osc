@@ -1,5 +1,8 @@
 import json
 import re
+import logging
+from logging.handlers import TimedRotatingFileHandler
+from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
@@ -21,6 +24,58 @@ targets_dict = {}
 routes = []
 logs = []
 ignore_rules = []
+file_logger = None
+
+
+def setup_file_logging(cfg):
+    """Configure file logging with daily rotation based on config."""
+    global file_logger
+
+    file_logging_cfg = cfg.get("file_logging", {})
+    enabled = file_logging_cfg.get("enabled", False)
+
+    if not enabled:
+        if file_logger:
+            for handler in file_logger.handlers[:]:
+                handler.close()
+                file_logger.removeHandler(handler)
+        file_logger = None
+        return
+
+    retention_days = file_logging_cfg.get("retention_days", 7)
+    log_level_str = file_logging_cfg.get("log_level", "DEBUG").upper()
+    log_level = getattr(logging, log_level_str, logging.DEBUG)
+
+    logs_dir = os.path.join(current_dir, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+
+    logger = logging.getLogger("mini_osc_file")
+    logger.setLevel(log_level)
+
+    # Remove existing handlers to avoid duplicates on reconfigure
+    for handler in logger.handlers[:]:
+        handler.close()
+        logger.removeHandler(handler)
+
+    log_file = os.path.join(logs_dir, "mini_osc.log")
+    handler = TimedRotatingFileHandler(
+        log_file,
+        when="midnight",
+        interval=1,
+        backupCount=retention_days,
+        encoding="utf-8"
+    )
+    handler.suffix = "%Y-%m-%d"
+    handler.setLevel(log_level)
+
+    formatter = logging.Formatter(
+        "[%(asctime)s] [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+    file_logger = logger
 
 ########################################
 # Chargement et validation de la config
@@ -160,6 +215,9 @@ def load_config(filename):
     if "connections" not in cfg or not isinstance(cfg["connections"], list):
         print("Invalid configuration : 'connections' must be a list.")
         sys.exit(1)
+
+    if "file_logging" not in cfg:
+        cfg["file_logging"] = {"enabled": False, "retention_days": 7, "log_level": "DEBUG"}
 
     return cfg
 
@@ -321,6 +379,41 @@ def clear_logs():
     global logs
     logs = []
     return jsonify({"status": "success"})
+
+@app.route('/restart', methods=['POST'])
+def restart_app():
+    add_log("Restart requested via web UI. Restarting...")
+    print("Restart requested via web UI. Restarting...")
+    def do_shutdown():
+        time.sleep(0.5)
+        os._exit(42)  # Exit code 42 = restart requested
+    threading.Thread(target=do_shutdown, daemon=True).start()
+    return jsonify({"status": "restarting"})
+
+@app.route('/update_file_logging', methods=['POST'])
+def update_file_logging():
+    data = request.json
+    config = load_config(CONFIG_FILE)
+    config['file_logging'] = {
+        "enabled": data.get("enabled", False),
+        "retention_days": int(data.get("retention_days", 7)),
+        "log_level": data.get("log_level", "DEBUG")
+    }
+    save_config(config)
+    setup_file_logging(config)
+    status = "enabled" if config['file_logging']['enabled'] else "disabled"
+    add_log(f"File logging {status}")
+    return jsonify({"status": "success"})
+
+@app.route('/get_file_logging_status', methods=['GET'])
+def get_file_logging_status():
+    config = load_config(CONFIG_FILE)
+    fl_cfg = config.get("file_logging", {"enabled": False, "retention_days": 7, "log_level": "DEBUG"})
+    logs_dir = os.path.join(current_dir, "logs")
+    log_files = []
+    if os.path.exists(logs_dir):
+        log_files = sorted([f for f in os.listdir(logs_dir) if f.startswith("mini_osc")], reverse=True)
+    return jsonify({**fl_cfg, "log_files": log_files})
 
 # API to get local IP
 @app.route('/get_local_ip', methods=['GET'])
@@ -551,6 +644,7 @@ def should_ignore(context):
 
 
 def handle_osc_in_message(address, args):
+    add_log(f"[ROUTE] Processing OSC message: address={address}, args={list(args)}", "DEBUG")
     # Source-level ignore check
     args_str = json.dumps(list(args))
     source_context = {
@@ -622,6 +716,7 @@ def handle_osc_in_message(address, args):
                 return
 
 def handle_incoming_non_osc(protocol, data, route_filter):
+    add_log(f"[ROUTE] Processing {protocol.upper()} message: data={json.dumps(data)[:200]}, filter={route_filter}", "DEBUG")
     # Source-level ignore check
     osc_addr = data.get("address", "")
     args_str = json.dumps(data.get("args", []))
@@ -733,12 +828,19 @@ def start_udp_server(ip, port):
 # Gestion des logs
 ########################################
 
-def add_log(message):
-    """Ajoute un message dans les logs et limite leur taille."""
+def add_log(message, level="INFO"):
+    """Ajoute un message dans les logs et optionnellement dans le fichier de log."""
     global logs
-    logs.append(message)
-    if len(logs) > 100:  # Limite à 100 entrées pour éviter un débordement
-        logs.pop(0)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    # DEBUG messages only go to file log, not the web UI
+    if level.upper() != "DEBUG":
+        display_msg = f"[{timestamp}] {message}"
+        logs.append(display_msg)
+        if len(logs) > 100:
+            logs.pop(0)
+    if file_logger:
+        log_level = getattr(logging, level.upper(), logging.INFO)
+        file_logger.log(log_level, message)
 
 ########################################
 # Serveur OSC principal
@@ -757,6 +859,9 @@ if __name__ == "__main__":
 
     # Expand connections to internal targets_dict + routes
     expand_connections(config)
+
+    # Setup file logging if enabled
+    setup_file_logging(config)
 
     print("Config loaded with success.")
     logs.append("Server is running and ready to receive requests.")
