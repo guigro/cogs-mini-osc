@@ -367,6 +367,12 @@
             color: #b8860b;
         }
 
+        .proto-tag-json {
+            background-color: rgba(232, 67, 147, 0.18);
+            color: #e84393;
+            border: 1px solid rgba(232, 67, 147, 0.35);
+        }
+
         /* ========================================
            Table
            ======================================== */
@@ -912,6 +918,7 @@
                                         <option value="tcp">TCP</option>
                                         <option value="udp">UDP</option>
                                         <option value="http">HTTP</option>
+                                        <option value="json">JSON (raw)</option>
                                     </select>
                                 </div>
                             </div>
@@ -1214,6 +1221,8 @@
                     s += ` <span class="proto-tag proto-tag-osc" style="font-size:0.65rem; margin-left:0.4rem;" title="Response forwarded as OSC to ${conn.response_to_osc.ip}:${conn.response_to_osc.port} ${conn.response_to_osc.address}">↩ OSC</span>`;
                 }
                 return label + s;
+            } else if (to.protocol === 'json') {
+                return label + `${tag} <small>POST</small> <code>${to.url || ''}</code>`;
             } else {
                 let s = `${tag} ${to.ip || ''}:${to.port || ''}`;
                 if (to.protocol === 'osc' && to.address) {
@@ -1335,6 +1344,8 @@
             } else if (conn.to.protocol === 'tcp' || conn.to.protocol === 'udp') {
                 document.getElementById('to_ip').value = conn.to.ip || '';
                 document.getElementById('to_port').value = conn.to.port || '';
+            } else if (conn.to.protocol === 'json') {
+                document.getElementById('to_url').value = conn.to.url || '';
             } else if (conn.to.protocol === 'http') {
                 document.getElementById('to_http_method').value = conn.to.method || 'POST';
                 toggleParamsSection();
@@ -1482,6 +1493,13 @@
                             <input id="to_resp_address" class="input" type="text" placeholder="/api_response">
                         </div>
                     </div>`;
+            } else if (protocol === 'json') {
+                container.innerHTML = `
+                    <div class="field">
+                        <label class="label">URL</label>
+                        <input id="to_url" class="input" type="text" placeholder="http://192.168.1.63/json/state">
+                    </div>
+                    <p class="help" style="margin-top:-0.5rem;">The first source argument is sent as the raw JSON body (Content-Type: application/json).</p>`;
             }
             updateRequestPreview();
         }
@@ -1584,6 +1602,11 @@
                     }
                     preview = 'POST ' + url + '\n' + JSON.stringify(body, null, 2);
                 }
+            } else if (toProtocol === 'json') {
+                const urlEl = document.getElementById('to_url');
+                const url = urlEl ? urlEl.value.trim() || '<url>' : '<url>';
+                const firstName = valueNames[0] || '<arg1>';
+                preview = 'POST ' + url + '\nContent-Type: application/json\n\n<' + firstName + '> (raw JSON body)';
             } else if (toProtocol === 'tcp' || toProtocol === 'udp') {
                 const ipEl = document.getElementById('to_ip');
                 const portEl = document.getElementById('to_port');
@@ -1646,6 +1669,8 @@
             } else if (toProtocol === 'tcp' || toProtocol === 'udp') {
                 connTo.ip = document.getElementById('to_ip').value;
                 connTo.port = parseInt(document.getElementById('to_port').value) || 0;
+            } else if (toProtocol === 'json') {
+                connTo.url = document.getElementById('to_url').value;
             } else if (toProtocol === 'http') {
                 connTo.method = document.getElementById('to_http_method').value;
                 connTo.url = document.getElementById('to_url').value;

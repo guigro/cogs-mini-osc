@@ -1,6 +1,6 @@
 # Mini-OSC for Cogs
 
-A protocol bridge that converts and routes messages between **OSC**, **HTTP**, **TCP**, and **UDP**. Designed to help [Cogs](https://cogs.show) communicate with network devices and external services.
+A protocol bridge that converts and routes messages between **OSC**, **HTTP**, **TCP**, **UDP**, and **raw JSON**. Designed to help [Cogs](https://cogs.show) communicate with network devices and external services.
 
 ## Quick Start
 
@@ -143,6 +143,38 @@ Example: if the API returns `{"status": "ok", "score": 42, "data": [1,2,3]}`, Co
 - `arguments[1]` = `42`
 - `arguments[2]` = `"[1, 2, 3]"`
 
+#### OSC to JSON (raw)
+
+Send an arbitrary JSON body to any HTTP endpoint. The **first OSC argument** is sent as-is as the request body with `Content-Type: application/json` — no wrapper, no transformation.
+
+Useful for devices/APIs that expect a specific JSON schema (WLED, Home Assistant, Hue, custom REST endpoints, etc.).
+
+```json
+{
+    "name": "OSC to WLED",
+    "from": {
+        "protocol": "osc",
+        "address_pattern": "/wled/state",
+        "values": ["body"]
+    },
+    "to": { "protocol": "json", "url": "http://192.168.1.63/json/state" }
+}
+```
+
+Then send an OSC message with the full JSON as the first argument:
+
+```bash
+oscsend 192.168.50.226 53000 /wled/state s '{"seg":[{"id":1,"on":true,"col":[[255,255,255]],"bri":255}]}'
+```
+
+Mini-OSC will perform the equivalent of:
+
+```bash
+curl -X POST "http://192.168.1.63/json/state" \
+  -H "Content-Type: application/json" \
+  -d '{"seg":[{"id":1,"on":true,"col":[[255,255,255]],"bri":255}]}'
+```
+
 ## Web Interface
 
 Three tabs accessible at `http://<ip>:<port>`:
@@ -209,6 +241,10 @@ JSON payload over a raw TCP socket:
 #### UDP
 
 JSON payload over a UDP datagram: `{"address": "/pattern", "args": [1, 2, 3]}`
+
+#### JSON (raw)
+
+The first OSC argument is sent as the raw POST body with `Content-Type: application/json`. No `{"address": ..., "args": ...}` wrapper is added — useful when the target device expects its own schema.
 
 ## API Endpoints
 

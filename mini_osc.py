@@ -165,6 +165,8 @@ def expand_connections(cfg):
             target["method"] = to.get("method", "POST").upper()
             if "params" in to:
                 target["params"] = to["params"]
+        if to["protocol"] == "json":
+            target["url"] = to.get("url", "")
         targets_dict[target_name] = target
 
         # Build internal route
@@ -496,6 +498,28 @@ def send_to_http(target, address, args):
         add_log(f"[HTTP] Error sending to {url}: {e}")
         return None
 
+def send_to_json(target, args):
+    """Send a raw JSON POST. The first argument is used as the JSON body, sent as-is."""
+    url = target["url"]
+
+    if isinstance(args, dict):
+        raw = json.dumps(args)
+    elif isinstance(args, (list, tuple)) and len(args) > 0:
+        first = args[0]
+        raw = first if isinstance(first, str) else json.dumps(first)
+    else:
+        raw = ""
+
+    try:
+        r = requests.post(url, data=raw.encode("utf-8"),
+                          headers={"Content-Type": "application/json"}, timeout=2)
+        print(f"[JSON] POST {url} {raw}, status={r.status_code}")
+        add_log(f"[JSON] POST {url} {raw}, status={r.status_code}")
+    except Exception as e:
+        print(f"[JSON] Error sending to {url}: {e}")
+        add_log(f"[JSON] Error sending to {url}: {e}")
+
+
 def send_to_tcp(target, address, args):
     ip = target["ip"]
     port = target["port"]
@@ -710,6 +734,8 @@ def handle_osc_in_message(address, args):
                     send_to_tcp(target, address, final_args)
                 elif ttype == "udp":
                     send_to_udp(target, address, final_args)
+                elif ttype == "json":
+                    send_to_json(target, final_args)
                 else:
                     print(f"Type de cible inconnu: {ttype}")
                 # Pour l'instant, on s'arrête après la première route matchée
