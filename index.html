@@ -926,6 +926,17 @@
                         </div>
                     </div>
 
+                    <div id="osc-osc-help" style="display:none; margin-top:1rem; background:var(--bg-card-nested); color:var(--text-primary); padding:0.75rem 1rem; border-radius:6px; border:1px solid var(--border-color); font-size:0.85rem;">
+                        <strong><i class="fas fa-route" style="margin-right:0.4rem;"></i>Device-prefix routing (OSC &rarr; OSC)</strong>
+                        <p style="margin-top:0.4rem;">When both the source and the destination are OSC, the <em>Address Pattern</em> acts as a <strong>device prefix</strong>:</p>
+                        <ul style="margin-top:0.4rem; margin-left:1.2rem; list-style:disc;">
+                            <li>Any incoming message whose address starts with the pattern is forwarded to the destination with the prefix stripped.<br>
+                                Example: pattern <code>/wled</code>, incoming <code>/wled/state/on</code> with args <code>[1]</code> &rarr; forwards <code>/state/on</code> with args <code>[1]</code>.</li>
+                            <li>OSC arguments are passed through unchanged.</li>
+                            <li>If the incoming address matches the pattern exactly (no sub-address), the optional <em>OSC Address</em> field of the destination is used as a fallback; if it is empty, the message is dropped and a warning is logged.</li>
+                        </ul>
+                    </div>
+
                     <div id="request-preview" style="display:none; margin-top:1rem;">
                         <label class="label" style="font-size:0.85rem;">Request preview</label>
                         <pre style="background:var(--bg-card-nested); color:var(--text-primary); padding:0.75rem 1rem; border-radius:6px; border:1px solid var(--border-color); font-size:0.82rem; white-space:pre-wrap; word-break:break-all; margin:0;"><code id="request-preview-content"></code></pre>
@@ -1381,8 +1392,9 @@
                     <div class="field">
                         <label class="label">Address Pattern</label>
                         <input id="from_address_pattern" class="input" type="text" placeholder="/pattern">
+                        <p class="help" id="pattern-prefix-help" style="display:none;">Acts as a <strong>device prefix</strong>: any incoming address starting with this pattern matches, and the prefix is stripped before forwarding.</p>
                     </div>
-                    <div class="field">
+                    <div class="field" id="from-values-field">
                         <label class="label">Values <span style="font-weight:normal; color:var(--text-secondary); font-size:0.85em;">(received from OSC)</span></label>
                         <div id="from-values-list"></div>
                         <button class="button is-link is-small mt-2" type="button" onclick="addValueField()"><i class="fas fa-plus" style="margin-right:0.3rem;"></i>Add value</button>
@@ -1546,9 +1558,20 @@
 
             const toProtocol = document.getElementById('conn_to_protocol').value;
             const fromProtocol = document.getElementById('conn_from_protocol').value;
+            const isOscToOsc = fromProtocol === 'osc' && toProtocol === 'osc';
 
-            // Hide preview for OSC destination or when no destination selected
-            if (!toProtocol || toProtocol === 'osc') {
+            // OSC → OSC device-prefix routing: toggle help texts and hide the
+            // Values field (positional args are passed through unchanged)
+            const oscHelp = document.getElementById('osc-osc-help');
+            if (oscHelp) oscHelp.style.display = isOscToOsc ? 'block' : 'none';
+            const patternHelp = document.getElementById('pattern-prefix-help');
+            if (patternHelp) patternHelp.style.display = isOscToOsc ? 'block' : 'none';
+            const valuesField = document.getElementById('from-values-field');
+            if (valuesField) valuesField.style.display = isOscToOsc ? 'none' : '';
+
+            // Hide preview when no destination selected, or for OSC destinations
+            // fed by a non-OSC source (nothing useful to show)
+            if (!toProtocol || (toProtocol === 'osc' && !isOscToOsc)) {
                 previewBox.style.display = 'none';
                 return;
             }
@@ -1567,7 +1590,16 @@
 
             let preview = '';
 
-            if (toProtocol === 'http') {
+            if (toProtocol === 'osc') {
+                // OSC → OSC device-prefix preview
+                const ipEl = document.getElementById('to_ip');
+                const portEl = document.getElementById('to_port');
+                const ip = ipEl ? ipEl.value.trim() || '<ip>' : '<ip>';
+                const port = portEl ? portEl.value.trim() || '<port>' : '<port>';
+                preview = 'OSC ' + ip + ':' + port + '\n'
+                    + 'Incoming:  ' + pattern + '/command/param1 [args…]\n'
+                    + 'Forwarded: /command/param1 [args…]   (prefix "' + pattern + '" stripped, args unchanged)';
+            } else if (toProtocol === 'http') {
                 const methodEl = document.getElementById('to_http_method');
                 const method = methodEl ? methodEl.value : 'POST';
                 const urlEl = document.getElementById('to_url');
@@ -1649,7 +1681,8 @@
                     const v = input.value.trim();
                     if (v) values.push(v);
                 });
-                if (values.length > 0) connFrom.values = values;
+                // Values do not apply to OSC → OSC (args are forwarded as-is)
+                if (values.length > 0 && toProtocol !== 'osc') connFrom.values = values;
             } else if (fromProtocol === 'http') {
                 connFrom.endpoint = document.getElementById('from_endpoint').value;
             } else {

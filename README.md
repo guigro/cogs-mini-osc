@@ -175,6 +175,30 @@ curl -X POST "http://192.168.1.63/json/state" \
   -d '{"seg":[{"id":1,"on":true,"col":[[255,255,255]],"bri":255}]}'
 ```
 
+#### OSC to OSC (device-prefix routing)
+
+Forward OSC messages to another OSC device. The `address_pattern` acts as a **device prefix**: any incoming address starting with the pattern is forwarded to the destination with the prefix stripped. OSC arguments are passed through unchanged.
+
+```json
+{
+    "name": "OSC to WLED device",
+    "from": { "protocol": "osc", "address_pattern": "/wled" },
+    "to": { "protocol": "osc", "ip": "192.168.1.63", "port": 9000 }
+}
+```
+
+With this connection, an incoming `/wled/state/on` with args `[1]` is forwarded to `192.168.1.63:9000` as `/state/on` with args `[1]`:
+
+```bash
+oscsend 192.168.50.226 53000 /wled/state/on i 1
+# → forwards OSC /state/on 1 to 192.168.1.63:9000
+```
+
+Notes:
+- If the incoming address matches the pattern **exactly** (no sub-address), the optional `to.address` field is used as a fallback forwarding address; if it is not set, the message is dropped and a warning is logged.
+- The `values` mapping does not apply to OSC destinations — arguments stay a positional list.
+- Connection order matters: the first matching connection wins.
+
 ## Web Interface
 
 Three tabs accessible at `http://<ip>:<port>`:

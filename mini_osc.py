@@ -682,64 +682,88 @@ def handle_osc_in_message(address, args):
 
     # On parcourt les routes pour voir si on a une route OSC->X
     for route in routes:
-        if route["from"]["protocol"] == "osc":
-            if route["from"]["address_pattern"] == address:
-                target_name = route["to"]["target_name"]
-                # Type de target ?
-                target = targets_dict.get(target_name)
-                if not target:
-                    print(f"Target {target_name} can't be found")
-                    add_log(f"Target {target_name} can't be found")
-                    return
+        if route["from"]["protocol"] != "osc":
+            continue
 
-                # Destination-level ignore check
-                full_context = {**source_context,
-                    "dest.protocol": target["type"],
-                    "dest.ip": target.get("ip", ""),
-                    "dest.port": str(target.get("port", ""))
-                }
-                if should_ignore(full_context):
-                    continue
+        pattern = route["from"]["address_pattern"]
+        target_name = route["to"]["target_name"]
+        target = targets_dict.get(target_name)
 
-                # ----------------------------------------------------------------
-                # Étape : gestion du mapping args -> dictionnaire selon 'values'
-                # ----------------------------------------------------------------
-                from_cfg = route["from"]
-                if "values" in from_cfg:
-                    mapped_args = {}
-                    for i, key_name in enumerate(from_cfg["values"]):
-                        if i < len(args):
-                            mapped_args[key_name] = args[i]
-                        else:
-                            mapped_args[key_name] = None
-                    final_args = mapped_args
+        # Les destinations OSC traitent le pattern comme un préfixe "device" :
+        # /wled matche aussi /wled/state/on, et le préfixe est retiré avant le forward.
+        prefix_match = (target is not None and target["type"] == "osc"
+                        and address.startswith(pattern + "/"))
+        if pattern != address and not prefix_match:
+            continue
+
+        if not target:
+            print(f"Target {target_name} can't be found")
+            add_log(f"Target {target_name} can't be found")
+            return
+
+        # Destination-level ignore check
+        full_context = {**source_context,
+            "dest.protocol": target["type"],
+            "dest.ip": target.get("ip", ""),
+            "dest.port": str(target.get("port", ""))
+        }
+        if should_ignore(full_context):
+            continue
+
+        # ----------------------------------------------------------------
+        # Étape : gestion du mapping args -> dictionnaire selon 'values'
+        # (non applicable aux destinations OSC : args positionnels transmis tels quels)
+        # ----------------------------------------------------------------
+        from_cfg = route["from"]
+        if "values" in from_cfg and target["type"] != "osc":
+            mapped_args = {}
+            for i, key_name in enumerate(from_cfg["values"]):
+                if i < len(args):
+                    mapped_args[key_name] = args[i]
                 else:
-                    final_args = args
-                # ----------------------------------------------------------------
+                    mapped_args[key_name] = None
+            final_args = mapped_args
+        else:
+            final_args = args
+        # ----------------------------------------------------------------
 
-                ttype = target["type"]
-                if ttype == "http":
-                    response = send_to_http(target, address, final_args)
-                    add_log("Send request to HTTP")
-                    # Forward HTTP response as OSC if configured
-                    resp_cfg = route.get("response_to_osc")
-                    if resp_cfg and resp_cfg.get("enabled") and response is not None:
-                        if isinstance(response, dict):
-                            osc_args = [json.dumps(v) if isinstance(v, (dict, list)) else v for v in response.values()]
-                        else:
-                            osc_args = [str(response)]
-                        send_osc_message(resp_cfg["ip"], resp_cfg["port"], resp_cfg["address"], osc_args)
-                        add_log(f"[HTTP→OSC] Response forwarded to {resp_cfg['ip']}:{resp_cfg['port']} {resp_cfg['address']}")
-                elif ttype == "tcp":
-                    send_to_tcp(target, address, final_args)
-                elif ttype == "udp":
-                    send_to_udp(target, address, final_args)
-                elif ttype == "json":
-                    send_to_json(target, final_args)
+        ttype = target["type"]
+        if ttype == "osc":
+            if prefix_match:
+                sub_address = address[len(pattern):]
+            else:
+                # Match exact du pattern : pas de sous-adresse, on utilise le fallback "address"
+                sub_address = route["to"].get("address")
+            if sub_address:
+                send_osc_message(target["ip"], target["port"], sub_address, list(args))
+                add_log(f"[OSC→OSC] {address} → forwarded as {sub_address} to {target['ip']}:{target['port']}")
+            else:
+                msg = (f"[OSC→OSC] {address} matched pattern {pattern} exactly but has no "
+                       f"sub-address and no fallback OSC Address is set — nothing sent")
+                print(msg)
+                add_log(msg, "WARNING")
+        elif ttype == "http":
+            response = send_to_http(target, address, final_args)
+            add_log("Send request to HTTP")
+            # Forward HTTP response as OSC if configured
+            resp_cfg = route.get("response_to_osc")
+            if resp_cfg and resp_cfg.get("enabled") and response is not None:
+                if isinstance(response, dict):
+                    osc_args = [json.dumps(v) if isinstance(v, (dict, list)) else v for v in response.values()]
                 else:
-                    print(f"Type de cible inconnu: {ttype}")
-                # Pour l'instant, on s'arrête après la première route matchée
-                return
+                    osc_args = [str(response)]
+                send_osc_message(resp_cfg["ip"], resp_cfg["port"], resp_cfg["address"], osc_args)
+                add_log(f"[HTTP→OSC] Response forwarded to {resp_cfg['ip']}:{resp_cfg['port']} {resp_cfg['address']}")
+        elif ttype == "tcp":
+            send_to_tcp(target, address, final_args)
+        elif ttype == "udp":
+            send_to_udp(target, address, final_args)
+        elif ttype == "json":
+            send_to_json(target, final_args)
+        else:
+            print(f"Type de cible inconnu: {ttype}")
+        # Pour l'instant, on s'arrête après la première route matchée
+        return
 
 def handle_incoming_non_osc(protocol, data, route_filter):
     add_log(f"[ROUTE] Processing {protocol.upper()} message: data={json.dumps(data)[:200]}, filter={route_filter}", "DEBUG")
