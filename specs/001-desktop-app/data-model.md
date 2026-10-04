@@ -46,7 +46,7 @@ Validation (existante, conservée) : `osc_server` présent, `flask_server` prés
 ```json
 {
     "osc_server": { "listen_ip": "127.0.0.1", "listen_port": 53000 },
-    "flask_server": { "ip": "127.0.0.1", "port": 5000 },
+    "flask_server": { "ip": "127.0.0.1", "port": 5009 },
     "connections": [],
     "ignore_rules": [],
     "file_logging": { "enabled": false, "retention_days": 7, "log_level": "DEBUG" }

@@ -52,7 +52,7 @@ Chaque décision suit le format Décision / Justification / Alternatives écart�
 
 ## R7. Configuration par défaut
 
-- **Décision**: nouveau fichier `config.default.json` embarqué (OSC `127.0.0.1:53000`, HTTP `127.0.0.1:5000`, aucune connexion, journalisation fichier désactivée), copié dans le dossier de données s'il n'y a pas de `config.json`.
+- **Décision**: nouveau fichier `config.default.json` embarqué (OSC `127.0.0.1:53000`, HTTP `127.0.0.1:5009` (5000 est pris par AirPlay sur macOS récent), aucune connexion, journalisation fichier désactivée), copié dans le dossier de données s'il n'y a pas de `config.json`.
 - **Justification**: le `config.json` du dépôt contient des connexions de test et des IP du réseau de développement : il ne doit pas devenir la configuration d'un opérateur.
 - **Configuration illisible**: `load_config` lèvera une exception `ConfigError` au lieu d'appeler `sys.exit(1)`. Le mode script l'attrape et sort avec le même message et le même code qu'aujourd'hui ; le mode bureau l'affiche dans la fenêtre. Le fichier n'est jamais réécrit si la lecture échoue.
 
