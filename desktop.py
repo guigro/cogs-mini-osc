@@ -132,6 +132,7 @@ class WindowApi:
 
 
 def open_window(url=None, page=None):
+    use_system_gtk()
     import webview
 
     if page is not None:
@@ -139,6 +140,13 @@ def open_window(url=None, page=None):
     else:
         webview.create_window(APP_NAME, url, width=1280, height=860, min_size=(800, 600))
     webview.start()
+
+
+def use_system_gtk():
+    """AppImage Linux : les hooks PyInstaller pointent GTK vers le bundle, mais GTK et WebKitGTK viennent du système."""
+    if getattr(sys, "frozen", False) and sys.platform.startswith("linux"):
+        for var in ("GI_TYPELIB_PATH", "GDK_PIXBUF_MODULE_FILE", "GDK_PIXBUF_MODULEDIR", "GIO_MODULE_DIR", "GTK_PATH", "GTK_DATA_PREFIX", "GTK_EXE_PREFIX"):
+            os.environ.pop(var, None)
 
 
 def free_port(kind=socket.SOCK_STREAM):

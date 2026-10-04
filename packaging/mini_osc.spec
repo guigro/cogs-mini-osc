@@ -4,6 +4,8 @@
 import os
 import sys
 
+from PyInstaller.utils.hooks import collect_submodules
+
 ROOT = os.path.dirname(SPECPATH)
 ICONS = os.path.join(SPECPATH, "icons")
 VERSION = os.environ.get("VERSION", "0.0.0").lstrip("v")
@@ -24,10 +26,21 @@ a = Analysis(
         (os.path.join(ROOT, "config.default.json"), "."),
         (os.path.join(ROOT, "vendor"), "vendor"),
     ],
-    hiddenimports=["mini_osc"],
+    # Sous Linux, gi charge ses overrides Python dynamiquement ; les typelibs viennent du système
+    hiddenimports=["mini_osc"] + (
+        ["gi", "cairo", "webview.platforms.gtk"] + collect_submodules("gi.overrides")
+        if sys.platform.startswith("linux") else []
+    ),
     excludes=["tkinter"],
     noarchive=False,
 )
+
+if sys.platform.startswith("linux"):
+    # GTK et WebKitGTK viennent du système cible (research.md R4) : on retire les bibliothèques
+    # système et les données GTK que les hooks gi auraient embarquées depuis la machine de build.
+    a.binaries = [b for b in a.binaries if not b[1].startswith(("/usr/lib", "/lib", "/usr/lib64", "/lib64"))]
+    a.datas = [d for d in a.datas if not d[0].startswith(("gi_typelibs", "lib/gdk-pixbuf", "lib/gio", "share/"))]
+
 pyz = PYZ(a.pure)
 
 if sys.platform == "win32":
