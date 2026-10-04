@@ -18,3 +18,11 @@ logs/
 # Claude Code
 CLAUDE.md
 .claude/
+
+# Desktop build
+build/
+dist/
+AppDir/
+*.AppImage
+*.dmg
+.venv-desktop/

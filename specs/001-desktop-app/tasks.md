@@ -19,11 +19,11 @@
 
 **Purpose**: dépendances, ressources locales, squelette de tests
 
-- [ ] T001 Ajouter `build/`, `dist/`, `*.AppImage`, `*.dmg` et `AppDir/` à `.gitignore`
-- [ ] T002 [P] Créer `requirements-desktop.txt` : `-r requirements.txt`, `pywebview>=5,<6`, `pyinstaller>=6,<7`, `pytest`, et `PyGObject>=3.42,<3.51 ; sys_platform == "linux"` (R4)
-- [ ] T003 [P] Télécharger Bulma 0.9.3 (`https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css`) dans `vendor/bulma.min.css` et Font Awesome 5.15.4 (`https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/js/all.min.js`) dans `vendor/fontawesome-all.min.js` ; vérifier que les fichiers ne sont pas vides et commencent par l'en-tête de licence attendu (R8)
-- [ ] T004 [P] Créer `config.default.json` avec le contenu exact de [data-model.md](data-model.md) (section « Configuration par défaut »)
-- [ ] T005 [P] Créer `tests/__init__.py` (vide) et `tests/conftest.py`, qui ajoute la racine du dépôt à `sys.path`
+- [X] T001 Ajouter `build/`, `dist/`, `*.AppImage`, `*.dmg` et `AppDir/` à `.gitignore`
+- [X] T002 [P] Créer `requirements-desktop.txt` : `-r requirements.txt`, `pywebview>=5,<6`, `pyinstaller>=6,<7`, `pytest`, et `PyGObject>=3.42,<3.51 ; sys_platform == "linux"` (R4)
+- [X] T003 [P] Télécharger Bulma 0.9.3 (`https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css`) dans `vendor/bulma.min.css` et Font Awesome 5.15.4 (`https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/js/all.min.js`) dans `vendor/fontawesome-all.min.js` ; vérifier que les fichiers ne sont pas vides et commencent par l'en-tête de licence attendu (R8)
+- [X] T004 [P] Créer `config.default.json` avec le contenu exact de [data-model.md](data-model.md) (section « Configuration par défaut »)
+- [X] T005 [P] Créer `tests/__init__.py` (vide) et `tests/conftest.py`, qui ajoute la racine du dépôt à `sys.path`
 
 ---
 
