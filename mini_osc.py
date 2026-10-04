@@ -18,13 +18,33 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, static_folder=current_dir, static_url_path='')
 CORS(app)  # Permet les requêtes CORS
 
-CONFIG_FILE = "config.json"
+# Dossier de données (config.json + logs/) : dossier du script par défaut,
+# remplacé par le dossier utilisateur quand on est lancé par desktop.py
+DATA_DIR = current_dir
+CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 config = None
 targets_dict = {}
 routes = []
 logs = []
 ignore_rules = []
 file_logger = None
+restart_callback = None  # Défini par desktop.py ; sinon /restart sort avec le code 42
+
+
+class ConfigError(Exception):
+    """Configuration absente, illisible ou invalide."""
+
+
+class FlaskStartError(Exception):
+    """Le serveur HTTP Flask n'a pas pu démarrer (port occupé, etc.)."""
+
+
+def set_data_dir(path):
+    """Change le dossier de données (config.json et logs/)."""
+    global DATA_DIR, CONFIG_FILE
+    os.makedirs(path, exist_ok=True)
+    DATA_DIR = path
+    CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 
 
 def setup_file_logging(cfg):
@@ -46,7 +66,7 @@ def setup_file_logging(cfg):
     log_level_str = file_logging_cfg.get("log_level", "DEBUG").upper()
     log_level = getattr(logging, log_level_str, logging.DEBUG)
 
-    logs_dir = os.path.join(current_dir, "logs")
+    logs_dir = os.path.join(DATA_DIR, "logs")
     os.makedirs(logs_dir, exist_ok=True)
 
     logger = logging.getLogger("mini_osc_file")
@@ -198,25 +218,20 @@ def load_config(filename):
         with open(filename, "r", encoding="utf-8") as f:
             cfg = json.load(f)
     except FileNotFoundError:
-        print(f"File {filename} can't be found.")
-        sys.exit(1)
+        raise ConfigError(f"File {filename} can't be found.")
     except json.JSONDecodeError as e:
-        print(f"Error parsing JSON in {filename} : {e}")
-        sys.exit(1)
+        raise ConfigError(f"Error parsing JSON in {filename} : {e}")
 
     # Auto-migrate old format
     cfg = migrate_config(cfg)
 
     # Validation
     if "osc_server" not in cfg:
-        print("Invalid configuration : 'osc_server' is missing.")
-        sys.exit(1)
+        raise ConfigError("Invalid configuration : 'osc_server' is missing.")
     if "flask_server" not in cfg:
-        print("Invalid configuration : 'flask_server' is missing.")
-        sys.exit(1)
+        raise ConfigError("Invalid configuration : 'flask_server' is missing.")
     if "connections" not in cfg or not isinstance(cfg["connections"], list):
-        print("Invalid configuration : 'connections' must be a list.")
-        sys.exit(1)
+        raise ConfigError("Invalid configuration : 'connections' must be a list.")
 
     if "file_logging" not in cfg:
         cfg["file_logging"] = {"enabled": False, "retention_days": 7, "log_level": "DEBUG"}
@@ -388,7 +403,10 @@ def restart_app():
     print("Restart requested via web UI. Restarting...")
     def do_shutdown():
         time.sleep(0.5)
-        os._exit(42)  # Exit code 42 = restart requested
+        if restart_callback:
+            restart_callback()
+        else:
+            os._exit(42)  # Exit code 42 = restart requested
     threading.Thread(target=do_shutdown, daemon=True).start()
     return jsonify({"status": "restarting"})
 
@@ -411,7 +429,7 @@ def update_file_logging():
 def get_file_logging_status():
     config = load_config(CONFIG_FILE)
     fl_cfg = config.get("file_logging", {"enabled": False, "retention_days": 7, "log_level": "DEBUG"})
-    logs_dir = os.path.join(current_dir, "logs")
+    logs_dir = os.path.join(DATA_DIR, "logs")
     log_files = []
     if os.path.exists(logs_dir):
         log_files = sorted([f for f in os.listdir(logs_dir) if f.startswith("mini_osc")], reverse=True)
@@ -901,7 +919,9 @@ def osc_message_handler(address, *args):
     add_log(f"OSC received: address={address}, args={args}")
     handle_osc_in_message(address, args)
 
-if __name__ == "__main__":
+def start_servers(run_flask=True):
+    """Charge la config et démarre les serveurs OSC, TCP/UDP puis Flask (bloquant si run_flask)."""
+    global config
     config = load_config(CONFIG_FILE)
 
     # Save migrated config if it was in old format
@@ -915,6 +935,7 @@ if __name__ == "__main__":
 
     print("Config loaded with success.")
     logs.append("Server is running and ready to receive requests.")
+    add_log(f"Config file: {CONFIG_FILE}")
 
     # Lancer le serveur OSC entrant
     osc_ip = config["osc_server"]["listen_ip"]
@@ -935,6 +956,9 @@ if __name__ == "__main__":
         elif fr["protocol"] == "udp":
             start_udp_server(fr["ip"], fr["port"])
 
+    if not run_flask:
+        return
+
     # Lancer le serveur HTTP Flask
     try:
         print(f"Starting Flask on {config['flask_server']['ip']}:{config['flask_server']['port']}...")
@@ -943,3 +967,14 @@ if __name__ == "__main__":
         print(f"Flask failed to start: {e}")
         import traceback
         traceback.print_exc()
+        raise FlaskStartError(f"Flask failed to start: {e}") from e
+
+
+if __name__ == "__main__":
+    try:
+        start_servers()
+    except ConfigError as e:
+        print(e)
+        sys.exit(1)
+    except FlaskStartError:
+        pass  # Déjà affichée par start_servers()

@@ -33,12 +33,12 @@
 
 **⚠️ CRITICAL**: aucune user story ne commence avant la fin de cette phase
 
-- [ ] T006 Dans `mini_osc.py`, ajouter `DATA_DIR = current_dir`, `CONFIG_FILE = os.path.join(DATA_DIR, "config.json")` et `def set_data_dir(path)`, qui met à jour les globales `DATA_DIR` et `CONFIG_FILE` et crée le dossier s'il manque
-- [ ] T007 Dans `mini_osc.py`, `setup_file_logging` : remplacer `os.path.join(current_dir, "logs")` par `os.path.join(DATA_DIR, "logs")`
-- [ ] T008 Dans `mini_osc.py`, ajouter `class ConfigError(Exception)` ; dans `load_config`, remplacer chaque couple `print(...)` + `sys.exit(1)` par `raise ConfigError(<même message>)`
-- [ ] T009 Dans `mini_osc.py`, déplacer le corps du bloc `if __name__ == "__main__":` dans `def start_servers(run_flask=True)` (chargement, sauvegarde après migration, `expand_connections`, `setup_file_logging`, serveurs OSC/TCP/UDP, puis `app.run` si `run_flask`). Ajouter `add_log(f"Config file: {CONFIG_FILE}")` au démarrage (FR-017). Le bloc `__main__` appelle `start_servers()` dans un `try`, attrape `ConfigError`, affiche le message et sort avec `sys.exit(1)`
-- [ ] T010 Dans `mini_osc.py`, ajouter `restart_callback = None` ; la route `/restart` appelle `restart_callback()` (dans le thread différé existant) s'il est défini, sinon garde `os._exit(42)`
-- [ ] T011 Vérifier qu'il n'y a pas de régression en mode script : `python mini_osc.py` charge le `config.json` du dépôt, `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5009/` renvoie 200, et un `config.json` volontairement invalide (copie temporaire) donne le même message qu'avant et le code de sortie 1
+- [X] T006 Dans `mini_osc.py`, ajouter `DATA_DIR = current_dir`, `CONFIG_FILE = os.path.join(DATA_DIR, "config.json")` et `def set_data_dir(path)`, qui met à jour les globales `DATA_DIR` et `CONFIG_FILE` et crée le dossier s'il manque
+- [X] T007 Dans `mini_osc.py`, `setup_file_logging` : remplacer `os.path.join(current_dir, "logs")` par `os.path.join(DATA_DIR, "logs")`
+- [X] T008 Dans `mini_osc.py`, ajouter `class ConfigError(Exception)` ; dans `load_config`, remplacer chaque couple `print(...)` + `sys.exit(1)` par `raise ConfigError(<même message>)`
+- [X] T009 Dans `mini_osc.py`, déplacer le corps du bloc `if __name__ == "__main__":` dans `def start_servers(run_flask=True)` (chargement, sauvegarde après migration, `expand_connections`, `setup_file_logging`, serveurs OSC/TCP/UDP, puis `app.run` si `run_flask`). Ajouter `add_log(f"Config file: {CONFIG_FILE}")` au démarrage (FR-017). Le bloc `__main__` appelle `start_servers()` dans un `try`, attrape `ConfigError`, affiche le message et sort avec `sys.exit(1)`
+- [X] T010 Dans `mini_osc.py`, ajouter `restart_callback = None` ; la route `/restart` appelle `restart_callback()` (dans le thread différé existant) s'il est défini, sinon garde `os._exit(42)`
+- [X] T011 Vérifier qu'il n'y a pas de régression en mode script : `python mini_osc.py` charge le `config.json` du dépôt, `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5009/` renvoie 200, et un `config.json` volontairement invalide (copie temporaire) donne le même message qu'avant et le code de sortie 1
 
 **Checkpoint**: le moteur est pilotable, le mode script est identique
 
