@@ -7,7 +7,80 @@ on:
     # TEMPORAIRE pendant le développement de la branche, à retirer avant le merge
     branches: ['feature/desktop-app']
 
+env:
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}
+
 jobs:
+  macos:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Python packages
+        run: pip install -r requirements-desktop.txt
+
+      - name: Unit tests
+        run: python -m pytest -q tests
+
+      - name: Build .app and .dmg (smoke test included)
+        run: packaging/build_macos.sh
+        env:
+          PYTHON: python
+          ARCH: ${{ matrix.arch }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Python packages
+        run: pip install -r requirements-desktop.txt
+
+      - name: Unit tests
+        run: python -m pytest -q tests
+
+      - name: Build .exe
+        run: python -m PyInstaller --noconfirm --clean packaging/mini_osc.spec
+
+      - name: Smoke test
+        run: ./dist/Mini-OSC.exe --smoke-test
+
+      - name: Rename
+        run: mv dist/Mini-OSC.exe "dist/Mini-OSC-${VERSION}-windows-x64.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: dist/*.exe
+          if-no-files-found: error
+
   linux:
     name: Linux x86_64
     runs-on: ubuntu-22.04
@@ -24,7 +97,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config \
-            gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick
+            gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick x11-utils
 
       - name: Python packages
         run: pip install -r requirements-desktop.txt
@@ -34,17 +107,15 @@ jobs:
 
       - name: appimagetool
         run: |
-          curl -fsSL -o /usr/local/bin/appimagetool \
+          sudo curl -fsSL -o /usr/local/bin/appimagetool \
             https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x /usr/local/bin/appimagetool
+          sudo chmod +x /usr/local/bin/appimagetool
 
-      - name: Build AppImage
+      - name: Build AppImage (smoke test included)
         run: packaging/build_linux.sh
-        env:
-          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}
 
       - name: Window test (virtual screen)
-        run: packaging/ci_window_test_linux.sh dist/*.AppImage linux-22.04.png
+        run: packaging/ci_window_test_linux.sh linux-22.04.png dist/*.AppImage
 
       - uses: actions/upload-artifact@v4
         with:
@@ -59,6 +130,46 @@ jobs:
           path: linux-22.04.png
           if-no-files-found: ignore
 
+
+  linux-diag:
+    # TEMPORAIRE : diagnostic de la fenêtre WebKitGTK sur écran virtuel
+    name: Linux window diagnostic
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config \
+            gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick x11-utils
+          dpkg -l | grep -i webkit2gtk
+      - name: Python packages
+        run: pip install -r requirements-desktop.txt
+      - name: Source, default
+        continue-on-error: true
+        run: packaging/ci_window_test_linux.sh src-default.png python desktop.py
+      - name: Source, no DMA-BUF / compositing
+        continue-on-error: true
+        run: packaging/ci_window_test_linux.sh src-nodmabuf.png python desktop.py
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+      - name: Source, no sandbox
+        continue-on-error: true
+        run: packaging/ci_window_test_linux.sh src-nosandbox.png python desktop.py
+        env:
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-diag
+          path: '*.png'
+
   linux-portability:
     name: Linux AppImage on Ubuntu 24.04
     needs: linux
@@ -69,7 +180,7 @@ jobs:
       - name: System packages (runtime only)
         run: |
           sudo apt-get update
-          sudo apt-get install -y gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick
+          sudo apt-get install -y gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick x11-utils
 
       - uses: actions/download-artifact@v4
         with:
@@ -79,7 +190,7 @@ jobs:
       - name: Window test (virtual screen)
         run: |
           chmod +x dist/*.AppImage
-          packaging/ci_window_test_linux.sh dist/*.AppImage linux-24.04.png
+          packaging/ci_window_test_linux.sh linux-24.04.png dist/*.AppImage
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -87,3 +198,26 @@ jobs:
           name: screenshot-linux-24.04
           path: linux-24.04.png
           if-no-files-found: ignore
+
+  release:
+    name: GitHub release
+    if: github.ref_type == 'tag'
+    needs: [macos, windows, linux, linux-portability]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: '{macos-*,windows-*,linux-x86_64}'
+          merge-multiple: true
+
+      - name: Create release
+        run: |
+          ls -la artifacts
+          PRERELEASE=""
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then PRERELEASE="--prerelease"; fi
+          gh release create "$GITHUB_REF_NAME" artifacts/* --repo "$GITHUB_REPOSITORY" --generate-notes $PRERELEASE
+        env:
+          GH_TOKEN: ${{ github.token }}

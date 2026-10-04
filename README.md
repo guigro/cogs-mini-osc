@@ -2,7 +2,43 @@
 
 A protocol bridge that converts and routes messages between **OSC**, **HTTP**, **TCP**, **UDP**, and **raw JSON**. Designed to help [Cogs](https://cogs.show) communicate with network devices and external services.
 
-## Quick Start
+## Desktop app (recommended)
+
+Mini-OSC is available as a standalone app with its own window. No Python needed. Download the file for your system from the [latest release](https://github.com/guigro/cogs-mini-osc/releases/latest):
+
+| System | File |
+|---|---|
+| macOS, Apple Silicon (M1 and later) | `Mini-OSC-<version>-macos-arm64.dmg` |
+| macOS, Intel | `Mini-OSC-<version>-macos-intel.dmg` |
+| Windows 10/11 (64-bit) | `Mini-OSC-<version>-windows-x64.exe` |
+| Linux PC (x86_64) | `Mini-OSC-<version>-linux-x86_64.AppImage` |
+
+Launch it: the servers start and the usual interface opens in a window. **Closing the window quits Mini-OSC.** Only one instance runs at a time: launching it again brings the existing window back.
+
+### First launch
+
+The app is not signed, so each system asks for confirmation once:
+
+- **macOS**: open the `.dmg` and drag Mini-OSC into Applications. At first launch macOS blocks it: go to *System Settings > Privacy & Security* and click *Open Anyway*. Alternative, in a terminal: `xattr -dr com.apple.quarantine /Applications/Mini-OSC.app`.
+- **Windows**: SmartScreen shows "Windows protected your PC": click *More info* then *Run anyway*.
+- **Linux**: make the file executable (`chmod +x Mini-OSC-*.AppImage`) and run it. It needs WebKitGTK, present on most desktops (Ubuntu 22.04+, Debian 12+); otherwise: `sudo apt install libwebkit2gtk-4.1-0 gir1.2-webkit2-4.1`.
+- **Firewall**: macOS and Windows ask to allow incoming connections, since Mini-OSC listens on the network. Allow it.
+
+### Where are my settings?
+
+The desktop app keeps `config.json` and the `logs/` folder in your user folder, so they survive app updates:
+
+| System | Folder |
+|---|---|
+| macOS | `~/Library/Application Support/Mini-OSC/` |
+| Windows | `%APPDATA%\Mini-OSC\` |
+| Linux | `~/.config/mini-osc/` |
+
+On first launch a default config is created (HTTP interface on port 5009, OSC on 53000, no connections). To reuse an existing setup, quit the app and copy your `config.json` into that folder (old `targets` + `routes` configs are converted automatically). If the file is unreadable, the window says so and leaves it untouched. The exact path is also written in the Logs tab at startup.
+
+To update, download the new version and replace the old one. Settings are kept.
+
+## Run from source
 
 ### Automatic installation
 
@@ -36,6 +72,10 @@ Double-click `Start_OSC_Webapp.command` to launch everything automatically (venv
 
 Once running, open **http://127.0.0.1:5000** (or your configured IP/port) in a browser.
 
+In this mode, `config.json` and `logs/` stay next to `mini_osc.py` (even if you launch it from another folder).
+
+To run the desktop window from source: `pip install -r requirements-desktop.txt` then `python desktop.py`. To build the apps yourself: `packaging/build_macos.sh`, `packaging/build_linux.sh`, or `pyinstaller packaging/mini_osc.spec` on Windows. Pushing a `v*` tag builds all four files on GitHub Actions and publishes a release.
+
 ## How It Works
 
 Mini-OSC acts as a bridge between protocols. You define **connections** that describe a **source** (from) and a **destination** (to). When a message arrives on the source, it gets converted and forwarded to the destination.
@@ -47,7 +87,7 @@ Cogs  <--OSC--  Mini-OSC  <--HTTP/TCP/UDP--  Device / API
 
 ## Configuration
 
-All settings are in `config.json`. The web interface lets you edit everything visually.
+All settings are in `config.json` (see [Where are my settings?](#where-are-my-settings) for the desktop app). The web interface lets you edit everything visually.
 
 ### Servers
 

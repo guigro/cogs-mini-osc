@@ -1,34 +1,32 @@
 #!/bin/bash
-# Lance l'AppImage sur un écran virtuel, vérifie qu'elle tourne et sert l'interface, puis fait une capture.
-# Usage : packaging/ci_window_test_linux.sh <fichier.AppImage> <capture.png>
+# Lance Mini-OSC sur un écran virtuel et vérifie que la fenêtre charge vraiment l'interface :
+# WebKit doit demander vendor/bulma.min.css au serveur (une simple requête HTTP de test ne suffit pas).
+# Usage : packaging/ci_window_test_linux.sh <capture.png> <commande...>
 set -uo pipefail
-APPIMAGE="$1"
-SHOT="$2"
+SHOT="$1"
+shift
 export APPIMAGE_EXTRACT_AND_RUN=1
 export MINI_OSC_DATA_DIR="$(mktemp -d)"
+export PYWEBVIEW_LOG=debug
 
-Xvfb :99 -screen 0 1440x960x24 &
+Xvfb :99 -screen 0 1440x960x24 > /dev/null 2>&1 &
 XVFB_PID=$!
 export DISPLAY=:99
 sleep 2
 
-"$APPIMAGE" > app.log 2>&1 &
+"$@" > app.log 2>&1 &
 APP_PID=$!
 
 status=1
-for _ in $(seq 1 40); do
-    if curl -fs -o /dev/null http://127.0.0.1:5009/; then status=0; break; fi
-    if ! kill -0 "$APP_PID" 2>/dev/null; then break; fi
+for _ in $(seq 1 60); do
+    if grep -qs "GET /vendor/bulma.min.css" app.log "$MINI_OSC_DATA_DIR/console.log"; then status=0; break; fi
+    if ! kill -0 "$APP_PID" 2>/dev/null; then echo "L'application s'est arrêtée."; break; fi
     sleep 0.5
 done
 
-# Laisse WebKit le temps de dessiner, puis vérifie que l'app tourne toujours
-sleep 8
-if ! kill -0 "$APP_PID" 2>/dev/null; then
-    echo "L'application s'est arrêtée."
-    status=1
-fi
+sleep 3
 import -window root "$SHOT" || true
+xwininfo -root -tree 2>/dev/null | grep -i "mini" || true
 
 echo "----- app.log -----"
 cat app.log

@@ -133,10 +133,10 @@
 **Independent Test**: pousser un tag `v2.0.0-rc1`, obtenir quatre jobs verts et une release avec quatre fichiers
 
 - [X] T039 [P] [US5] Créer les icônes `packaging/icons/mini-osc.png` (1024 px), `packaging/icons/mini-osc.icns` (avec `iconutil`) et `packaging/icons/mini-osc.ico`, et les référencer dans `packaging/mini_osc.spec` et `packaging/build_linux.sh`
-- [ ] T040 [US5] Étendre `.github/workflows/build.yml` : déclencheurs `push: tags: ['v*']` et `workflow_dispatch` ; matrice `macos-15` (arm64), `macos-15-intel` (intel), `windows-latest` (x64), `ubuntu-22.04` (x86_64) ; Python 3.12 ; `pytest tests/` sur chaque job ; version tirée du tag (sinon `dev`)
-- [ ] T041 [US5] Dans `.github/workflows/build.yml`, étape Windows : `pyinstaller packaging/mini_osc.spec`, smoke test de `dist/Mini-OSC.exe --smoke-test`, renommage en `Mini-OSC-$VERSION-windows-x64.exe` (shell `bash`)
-- [ ] T042 [US5] Dans `.github/workflows/build.yml`, étapes macOS et Linux : appeler `packaging/build_macos.sh` ou `packaging/build_linux.sh` avec `VERSION` et `ARCH`, puis envoyer chaque livrable en artefact (`actions/upload-artifact`)
-- [ ] T043 [US5] Dans `.github/workflows/build.yml`, job `release` (`needs` sur toute la matrice, seulement sur un tag, `permissions: contents: write`) : télécharger les quatre artefacts et `gh release create "$TAG" dist/* --generate-notes` (R14)
+- [X] T040 [US5] Étendre `.github/workflows/build.yml` : déclencheurs `push: tags: ['v*']` et `workflow_dispatch` ; matrice `macos-15` (arm64), `macos-15-intel` (intel), `windows-latest` (x64), `ubuntu-22.04` (x86_64) ; Python 3.12 ; `pytest tests/` sur chaque job ; version tirée du tag (sinon `dev`)
+- [X] T041 [US5] Dans `.github/workflows/build.yml`, étape Windows : `pyinstaller packaging/mini_osc.spec`, smoke test de `dist/Mini-OSC.exe --smoke-test`, renommage en `Mini-OSC-$VERSION-windows-x64.exe` (shell `bash`)
+- [X] T042 [US5] Dans `.github/workflows/build.yml`, étapes macOS et Linux : appeler `packaging/build_macos.sh` ou `packaging/build_linux.sh` avec `VERSION` et `ARCH`, puis envoyer chaque livrable en artefact (`actions/upload-artifact`)
+- [X] T043 [US5] Dans `.github/workflows/build.yml`, job `release` (`needs` sur toute la matrice, seulement sur un tag, `permissions: contents: write`) : télécharger les quatre artefacts et `gh release create "$TAG" dist/* --generate-notes` (R14)
 - [ ] T044 [US5] Pousser la branche, puis le tag `v2.0.0-rc1` ; vérifier quatre jobs verts et une release avec quatre fichiers (`gh release view v2.0.0-rc1`) ; corriger jusqu'au vert (quickstart section 5)
 
 ---
@@ -154,7 +154,7 @@
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
-- [ ] T047 [P] Mettre à jour `README.md` : téléchargement par plateforme (tableau des quatre fichiers), premier lancement (Gatekeeper sous macOS 15 « Ouvrir quand même » ou `xattr -dr com.apple.quarantine`, SmartScreen, pare-feu), prérequis Linux (`libwebkit2gtk-4.1-0`, `gir1.2-webkit2-4.1`, Ubuntu 22.04+ ou Debian 12+), emplacement de la config et des logs par système, mode script inchangé (FR-016)
+- [X] T047 [P] Mettre à jour `README.md` : téléchargement par plateforme (tableau des quatre fichiers), premier lancement (Gatekeeper sous macOS 15 « Ouvrir quand même » ou `xattr -dr com.apple.quarantine`, SmartScreen, pare-feu), prérequis Linux (`libwebkit2gtk-4.1-0`, `gir1.2-webkit2-4.1`, Ubuntu 22.04+ ou Debian 12+), emplacement de la config et des logs par système, mode script inchangé (FR-016)
 - [ ] T048 [P] Mettre à jour `CLAUDE.md` du projet : section « Desktop app » (`desktop.py`, `packaging/`, CI, `DATA_DIR`, `restart_callback`)
 - [ ] T049 Tester l'exécutable Windows et l'AppImage x86_64 de la release candidate sur de vraies machines (quickstart section 6), avec l'aide de l'utilisateur
 - [ ] T050 Relecture finale : aucun tiret long ni demi-cadratin dans le code, les messages et la documentation ajoutés (recherche des caractères U+2014 et U+2013 avec `grep -rnP "\x{2014}|\x{2013}"`) ; `pytest tests/` vert
