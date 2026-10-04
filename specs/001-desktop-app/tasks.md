@@ -157,7 +157,7 @@
 - [X] T047 [P] Mettre à jour `README.md` : téléchargement par plateforme (tableau des quatre fichiers), premier lancement (Gatekeeper sous macOS 15 « Ouvrir quand même » ou `xattr -dr com.apple.quarantine`, SmartScreen, pare-feu), prérequis Linux (`libwebkit2gtk-4.1-0`, `gir1.2-webkit2-4.1`, Ubuntu 22.04+ ou Debian 12+), emplacement de la config et des logs par système, mode script inchangé (FR-016)
 - [X] T048 [P] Mettre à jour `CLAUDE.md` du projet : section « Desktop app » (`desktop.py`, `packaging/`, CI, `DATA_DIR`, `restart_callback`)
 - [ ] T049 Tester l'exécutable Windows et l'AppImage x86_64 de la release candidate sur de vraies machines (quickstart section 6), avec l'aide de l'utilisateur
-- [ ] T050 Relecture finale : aucun tiret long ni demi-cadratin dans le code, les messages et la documentation ajoutés (recherche des caractères U+2014 et U+2013 avec `grep -rnP "\x{2014}|\x{2013}"`) ; `pytest tests/` vert
+- [X] T050 Relecture finale : aucun tiret long ni demi-cadratin dans le code, les messages et la documentation ajoutés (recherche des caractères U+2014 et U+2013 avec `grep -rnP "\x{2014}|\x{2013}"`) ; `pytest tests/` vert
 
 ---
 
