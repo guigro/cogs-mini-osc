@@ -102,9 +102,9 @@
 
 **Independent Test**: changer le port OSC, cliquer sur Restart, l'application écoute sur le nouveau port en moins de 10 s, avec une seule fenêtre
 
-- [ ] T032 [US3] Dans `desktop.py`, `relaunch()` : relancer l'exécutable courant (`sys.executable` empaqueté, ou `sys.executable desktop.py` depuis les sources) avec `--wait-lock`, détaché (`start_new_session=True` en POSIX, `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` sous Windows), puis `os._exit(0)` ; l'assigner à `mini_osc.restart_callback` dans `main()`
-- [ ] T033 [US3] Dans `desktop.py`, `--wait-lock` : réessayer la prise du verrou toutes les 250 ms pendant 15 s au maximum, puis attendre 2 s avant `start_servers` pour laisser le système libérer les ports (R10)
-- [ ] T034 [US3] Vérifier sur le `.app` local : changer le port OSC, Restart, vérifier le nouveau port (`lsof -i UDP:<port>`), une seule fenêtre, moins de 10 s
+- [X] T032 [US3] Dans `desktop.py`, `relaunch()` : relancer l'exécutable courant (`sys.executable` empaqueté, ou `sys.executable desktop.py` depuis les sources) avec `--wait-lock`, détaché (`start_new_session=True` en POSIX, `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` sous Windows), puis `os._exit(0)` ; l'assigner à `mini_osc.restart_callback` dans `main()`
+- [X] T033 [US3] Dans `desktop.py`, `--wait-lock` : réessayer la prise du verrou toutes les 250 ms pendant 15 s au maximum, puis attendre 2 s avant `start_servers` pour laisser le système libérer les ports (R10)
+- [X] T034 [US3] Vérifier sur le `.app` local : changer le port OSC, Restart, vérifier le nouveau port (`lsof -i UDP:<port>`), une seule fenêtre, moins de 10 s
 
 ---
 
@@ -116,13 +116,13 @@
 
 ### Tests for User Story 4
 
-- [ ] T035 [P] [US4] Écrire `tests/test_single_instance.py` : `acquire_lock(port)` réussit sur un port libre ; un second `acquire_lock` sur le même port échoue tant que le premier est tenu, et réussit après sa libération ; `notify_existing(port)` envoie `show\n` et l'écouteur appelle le callback (port de test différent de 53999)
+- [X] T035 [P] [US4] Écrire `tests/test_single_instance.py` : `acquire_lock(port)` réussit sur un port libre ; un second `acquire_lock` sur le même port échoue tant que le premier est tenu, et réussit après sa libération ; `notify_existing(port)` envoie `show\n` et l'écouteur appelle le callback (port de test différent de 53999)
 
 ### Implementation for User Story 4
 
-- [ ] T036 [US4] Dans `desktop.py`, `acquire_lock(port=53999)` : socket TCP sur `127.0.0.1`, `SO_EXCLUSIVEADDRUSE` sous Windows, jamais `SO_REUSEADDR`, puis `listen` ; un thread `daemon` accepte les connexions et, sur `show\n`, appelle `window.restore()` puis `window.show()` ; `notify_existing(port)` ; faire passer T035
-- [ ] T037 [US4] Dans `desktop.py`, `main()` : prendre le verrou avant tout démarrage de serveur ; s'il est pris (et sans `--wait-lock`), `notify_existing` puis `sys.exit(0)` ([contracts/launcher.md](contracts/launcher.md))
-- [ ] T038 [US4] Vérifier sur le `.app` local : un second lancement ramène la fenêtre, un seul processus (`pgrep -f Mini-OSC`), le routage fonctionne toujours
+- [X] T036 [US4] Dans `desktop.py`, `acquire_lock(port=53999)` : socket TCP sur `127.0.0.1`, `SO_EXCLUSIVEADDRUSE` sous Windows, jamais `SO_REUSEADDR`, puis `listen` ; un thread `daemon` accepte les connexions et, sur `show\n`, appelle `window.restore()` puis `window.show()` ; `notify_existing(port)` ; faire passer T035
+- [X] T037 [US4] Dans `desktop.py`, `main()` : prendre le verrou avant tout démarrage de serveur ; s'il est pris (et sans `--wait-lock`), `notify_existing` puis `sys.exit(0)` ([contracts/launcher.md](contracts/launcher.md))
+- [X] T038 [US4] Vérifier sur le `.app` local : un second lancement ramène la fenêtre, un seul processus (`pgrep -f Mini-OSC`), le routage fonctionne toujours
 
 ---
 

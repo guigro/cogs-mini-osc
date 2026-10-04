@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -18,6 +19,10 @@ import urllib.request
 
 APP_NAME = "Mini-OSC"
 STARTUP_TIMEOUT = 15  # secondes
+LOCK_PORT = 53999  # verrou d'instance unique (contracts/launcher.md)
+LOCK_WAIT = 15  # secondes, avec --wait-lock
+
+_window = None  # fenêtre pywebview courante, pour la ramener au premier plan
 
 
 def resource_dir():
@@ -126,19 +131,96 @@ def error_html(message, config_path, config_problem=False):
 </body></html>"""
 
 
+def acquire_lock(port=LOCK_PORT):
+    """Prend le verrou d'instance unique (socket en écoute). Renvoie la socket, ou None si une instance tourne."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if sys.platform.startswith("win"):
+        # Sous Windows, SO_REUSEADDR permettrait de voler le port : on demande l'exclusivité
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    else:
+        # En POSIX, SO_REUSEADDR ignore seulement le TIME_WAIT ; deux écoutes sur le même port restent impossibles
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.bind(("127.0.0.1", port))
+        s.listen(4)
+    except OSError:
+        s.close()
+        return None
+    return s
+
+
+def serve_lock(lock, on_show):
+    """Répond aux autres lancements : 'show' ramène la fenêtre existante."""
+    def run():
+        while True:
+            try:
+                conn, _ = lock.accept()
+            except OSError:
+                return
+            with conn:
+                conn.settimeout(1)
+                try:
+                    data = conn.recv(16)
+                except OSError:
+                    continue
+                if data.strip() == b"show":
+                    on_show()
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def notify_existing(port=LOCK_PORT):
+    """Demande à l'instance déjà lancée de se montrer. Renvoie False si personne ne répond."""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=2) as c:
+            c.sendall(b"show\n")
+        return True
+    except OSError:
+        return False
+
+
+def show_window():
+    if _window is not None:
+        try:
+            _window.restore()
+            _window.show()
+        except Exception:
+            pass
+
+
+def relaunch_command():
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--wait-lock"]
+    return [sys.executable, os.path.abspath(__file__), "--wait-lock"]
+
+
+def relaunch():
+    """Restart en mode bureau : lance une nouvelle instance détachée, puis quitte celle-ci."""
+    env = dict(os.environ, PYINSTALLER_RESET_ENVIRONMENT="1")
+    kwargs = {}
+    if sys.platform.startswith("win"):
+        kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        kwargs["start_new_session"] = True
+    subprocess.Popen(relaunch_command(), env=env, close_fds=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kwargs)
+    os._exit(0)
+
+
 class WindowApi:
     def quit(self):
         os._exit(0)
 
 
 def open_window(url=None, page=None):
+    global _window
     use_system_gtk()
     import webview
 
     if page is not None:
-        webview.create_window(APP_NAME, html=page, width=760, height=520, js_api=WindowApi())
+        _window = webview.create_window(APP_NAME, html=page, width=760, height=520, js_api=WindowApi())
     else:
-        webview.create_window(APP_NAME, url, width=1280, height=860, min_size=(800, 600))
+        _window = webview.create_window(APP_NAME, url, width=1280, height=860, min_size=(800, 600))
     webview.start()
 
 
@@ -202,6 +284,21 @@ def main(argv=None):
         smoke_test()
 
     import mini_osc
+
+    lock = acquire_lock()
+    if lock is None and args.wait_lock:
+        # Restart : l'instance précédente est en train de quitter
+        deadline = time.monotonic() + LOCK_WAIT
+        while lock is None and time.monotonic() < deadline:
+            time.sleep(0.25)
+            lock = acquire_lock()
+        # Comme le script historique : laisse le système libérer les ports des serveurs
+        time.sleep(2)
+    if lock is None:
+        notify_existing()
+        sys.exit(0)
+    serve_lock(lock, show_window)
+    mini_osc.restart_callback = relaunch
 
     data_dir = default_data_dir()
     mini_osc.set_data_dir(data_dir)

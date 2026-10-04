@@ -64,7 +64,7 @@ Chaque décision suit le format Décision / Justification / Alternatives écart�
 
 ## R9. Instance unique
 
-- **Décision**: verrou par socket TCP en écoute sur `127.0.0.1:53999`. Si le port est pris, une autre instance tourne : on lui envoie `show` sur cette socket (elle remet sa fenêtre au premier plan), puis on quitte. Sous Windows, option `SO_EXCLUSIVEADDRUSE` ; jamais `SO_REUSEADDR`.
+- **Décision**: verrou par socket TCP en écoute sur `127.0.0.1:53999`. Si le port est pris, une autre instance tourne : on lui envoie `show` sur cette socket (elle remet sa fenêtre au premier plan), puis on quitte. Sous Windows, option `SO_EXCLUSIVEADDRUSE` (là, `SO_REUSEADDR` permettrait de voler le port). En POSIX, `SO_REUSEADDR` : il ignore seulement le `TIME_WAIT` laissé par une notification ou un Restart, et deux écoutes sur le même port restent impossibles (vérifié par `tests/test_single_instance.py`).
 - **Justification**: le système libère la socket si le processus meurt, donc pas de verrou orphelin (contrairement à un fichier verrou). Le même canal sert à ramener la fenêtre.
 - **Alternatives écartées**: fichier verrou (orphelin après un crash) ; mutex nommé Windows (spécifique à un système).
 

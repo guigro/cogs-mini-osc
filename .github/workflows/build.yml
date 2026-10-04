@@ -39,9 +39,9 @@ jobs:
           chmod +x /usr/local/bin/appimagetool
 
       - name: Build AppImage
-        run: VERSION="${GITHUB_REF_NAME}" packaging/build_linux.sh
+        run: packaging/build_linux.sh
         env:
-          GITHUB_REF_NAME: ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}
+          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}
 
       - name: Window test (virtual screen)
         run: packaging/ci_window_test_linux.sh dist/*.AppImage linux-22.04.png
