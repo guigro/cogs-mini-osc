@@ -83,14 +83,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T027 [P] [US2] Écrire `tests/test_config_bootstrap.py` : `ensure_config(data_dir, default_path)` copie la config par défaut si elle est absente, ne touche pas une config existante (comparer le contenu octet par octet), et ne touche pas une config invalide ; `mini_osc.load_config` lève `ConfigError` sur un JSON invalide et sur une section manquante ; l'ancien format `targets` + `routes` est migré en `connections`
+- [X] T027 [P] [US2] Écrire `tests/test_config_bootstrap.py` : `ensure_config(data_dir, default_path)` copie la config par défaut si elle est absente, ne touche pas une config existante (comparer le contenu octet par octet), et ne touche pas une config invalide ; `mini_osc.load_config` lève `ConfigError` sur un JSON invalide et sur une section manquante ; l'ancien format `targets` + `routes` est migré en `connections`
 
 ### Implementation for User Story 2
 
-- [ ] T028 [US2] Extraire dans `desktop.py` la création de la config du premier lancement en `ensure_config(data_dir, default_path)` ; faire passer T027
-- [ ] T029 [US2] Dans `desktop.py`, quand l'exception capturée est une `ConfigError`, la page d'erreur indique « Configuration illisible », le message, et le chemin de `config.json` à corriger ; vérifier que le fichier n'est pas modifié (comparer son horodatage avant et après)
-- [ ] T030 [US2] Vérifier que les logs fichiers vont dans `<DataDir>/logs/` quand `file_logging.enabled` est vrai, en mode bureau (`MINI_OSC_DATA_DIR`) comme en mode script (dossier du script)
-- [ ] T031 [US2] Vérification manuelle : 10 cycles quitter/relancer sans perte, puis remplacement du `.app` par un nouveau build sans perte (SC-005)
+- [X] T028 [US2] Extraire dans `desktop.py` la création de la config du premier lancement en `ensure_config(data_dir, default_path)` ; faire passer T027
+- [X] T029 [US2] Dans `desktop.py`, quand l'exception capturée est une `ConfigError`, la page d'erreur indique « Configuration illisible », le message, et le chemin de `config.json` à corriger ; vérifier que le fichier n'est pas modifié (comparer son horodatage avant et après)
+- [X] T030 [US2] Vérifier que les logs fichiers vont dans `<DataDir>/logs/` quand `file_logging.enabled` est vrai, en mode bureau (`MINI_OSC_DATA_DIR`) comme en mode script (dossier du script)
+- [X] T031 [US2] Vérification manuelle : 10 cycles quitter/relancer sans perte, puis remplacement du `.app` par un nouveau build sans perte (SC-005)
 
 **Checkpoint**: US1 et US2 forment une application exploitable en salle
 
