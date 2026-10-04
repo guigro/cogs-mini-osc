@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     tags: ['v*']
+    # TEMPORAIRE pendant le développement de la branche, à retirer avant le merge
+    branches: ['feature/desktop-app']
 
 jobs:
   linux:
