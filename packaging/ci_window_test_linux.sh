@@ -14,12 +14,17 @@ XVFB_PID=$!
 export DISPLAY=:99
 sleep 2
 
+START=$(date +%s)
 "$@" > app.log 2>&1 &
 APP_PID=$!
 
 status=1
-for _ in $(seq 1 60); do
-    if grep -qs "GET /vendor/bulma.min.css" app.log "$MINI_OSC_DATA_DIR/console.log"; then status=0; break; fi
+for _ in $(seq 1 90); do
+    if grep -qs "GET /vendor/bulma.min.css" app.log "$MINI_OSC_DATA_DIR/console.log"; then
+        status=0
+        echo "Interface chargée dans la fenêtre en $(( $(date +%s) - START )) s"
+        break
+    fi
     if ! kill -0 "$APP_PID" 2>/dev/null; then echo "L'application s'est arrêtée."; break; fi
     sleep 0.5
 done

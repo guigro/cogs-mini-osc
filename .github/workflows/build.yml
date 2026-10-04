@@ -144,7 +144,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config \
-            gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick x11-utils
+            gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick x11-utils dbus-x11
           dpkg -l | grep -i webkit2gtk
       - name: Python packages
         run: pip install -r requirements-desktop.txt
@@ -157,13 +157,14 @@ jobs:
         env:
           WEBKIT_DISABLE_DMABUF_RENDERER: '1'
           WEBKIT_DISABLE_COMPOSITING_MODE: '1'
-      - name: Source, no sandbox
+      - name: Source, inside a D-Bus session (like a real desktop)
         continue-on-error: true
-        run: packaging/ci_window_test_linux.sh src-nosandbox.png python desktop.py
+        run: packaging/ci_window_test_linux.sh src-dbus.png dbus-run-session -- python desktop.py
+      - name: Source, no a11y bridge
+        continue-on-error: true
+        run: packaging/ci_window_test_linux.sh src-noatbridge.png python desktop.py
         env:
-          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
-          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
-          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+          NO_AT_BRIDGE: '1'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
