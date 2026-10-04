@@ -97,7 +97,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config \
-            gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick x11-utils
+            gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick x11-utils dbus-x11
 
       - name: Python packages
         run: pip install -r requirements-desktop.txt
@@ -115,7 +115,7 @@ jobs:
         run: packaging/build_linux.sh
 
       - name: Window test (virtual screen)
-        run: packaging/ci_window_test_linux.sh linux-22.04.png dist/*.AppImage
+        run: packaging/ci_window_test_linux.sh linux-22.04.png dbus-run-session -- dist/*.AppImage
 
       - uses: actions/upload-artifact@v4
         with:
@@ -131,46 +131,6 @@ jobs:
           if-no-files-found: ignore
 
 
-  linux-diag:
-    # TEMPORAIRE : diagnostic de la fenêtre WebKitGTK sur écran virtuel
-    name: Linux window diagnostic
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: System packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config \
-            gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick x11-utils dbus-x11
-          dpkg -l | grep -i webkit2gtk
-      - name: Python packages
-        run: pip install -r requirements-desktop.txt
-      - name: Source, default
-        continue-on-error: true
-        run: packaging/ci_window_test_linux.sh src-default.png python desktop.py
-      - name: Source, no DMA-BUF / compositing
-        continue-on-error: true
-        run: packaging/ci_window_test_linux.sh src-nodmabuf.png python desktop.py
-        env:
-          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
-          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
-      - name: Source, inside a D-Bus session (like a real desktop)
-        continue-on-error: true
-        run: packaging/ci_window_test_linux.sh src-dbus.png dbus-run-session -- python desktop.py
-      - name: Source, no a11y bridge
-        continue-on-error: true
-        run: packaging/ci_window_test_linux.sh src-noatbridge.png python desktop.py
-        env:
-          NO_AT_BRIDGE: '1'
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: screenshots-diag
-          path: '*.png'
-
   linux-portability:
     name: Linux AppImage on Ubuntu 24.04
     needs: linux
@@ -181,7 +141,7 @@ jobs:
       - name: System packages (runtime only)
         run: |
           sudo apt-get update
-          sudo apt-get install -y gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick x11-utils
+          sudo apt-get install -y gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick x11-utils dbus-x11
 
       - uses: actions/download-artifact@v4
         with:
@@ -191,7 +151,7 @@ jobs:
       - name: Window test (virtual screen)
         run: |
           chmod +x dist/*.AppImage
-          packaging/ci_window_test_linux.sh linux-24.04.png dist/*.AppImage
+          packaging/ci_window_test_linux.sh linux-24.04.png dbus-run-session -- dist/*.AppImage
 
       - uses: actions/upload-artifact@v4
         if: always()

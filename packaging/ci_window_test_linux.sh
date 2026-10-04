@@ -2,6 +2,7 @@
 # Lance Mini-OSC sur un écran virtuel et vérifie que la fenêtre charge vraiment l'interface :
 # WebKit doit demander vendor/bulma.min.css au serveur (une simple requête HTTP de test ne suffit pas).
 # Usage : packaging/ci_window_test_linux.sh <capture.png> <commande...>
+# Lancer la commande dans dbus-run-session : sans bus D-Bus, WebKitGTK attend 25 s un délai d'expiration.
 set -uo pipefail
 SHOT="$1"
 shift
@@ -21,8 +22,10 @@ APP_PID=$!
 status=1
 for _ in $(seq 1 90); do
     if grep -qs "GET /vendor/bulma.min.css" app.log "$MINI_OSC_DATA_DIR/console.log"; then
-        status=0
-        echo "Interface chargée dans la fenêtre en $(( $(date +%s) - START )) s"
+        ELAPSED=$(( $(date +%s) - START ))
+        echo "Interface chargée dans la fenêtre en ${ELAPSED} s"
+        # SC-002 : interface utilisable en moins de 10 s
+        if [ "$ELAPSED" -le 10 ]; then status=0; else echo "Trop lent (plus de 10 s)."; fi
         break
     fi
     if ! kill -0 "$APP_PID" 2>/dev/null; then echo "L'application s'est arrêtée."; break; fi
