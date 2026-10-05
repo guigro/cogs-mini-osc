@@ -5,7 +5,7 @@ Démarre le moteur de mini_osc.py dans un thread, puis ouvre une fenêtre native
 Voir specs/001-desktop-app/contracts/launcher.md.
 """
 import argparse
-import html
+import errno
 import json
 import os
 import shutil
@@ -16,6 +16,8 @@ import tempfile
 import threading
 import time
 import urllib.request
+
+from desktop_repair import RepairApi, repair_html
 
 APP_NAME = "Mini-OSC"
 STARTUP_TIMEOUT = 15  # secondes
@@ -89,7 +91,12 @@ def describe_error(error, url):
     if isinstance(error, SystemExit):
         return f"Le serveur HTTP n'a pas pu démarrer sur {url} : le port est probablement déjà utilisé par un autre programme."
     if isinstance(error, OSError):
-        return f"Un serveur n'a pas pu démarrer : {error} (port déjà utilisé ?)"
+        # EADDRNOTAVAIL (macOS 49, Linux 99, Windows 10049) / EADDRINUSE (48, 98, 10048)
+        if error.errno in (errno.EADDRNOTAVAIL, 10049):
+            return f"Un serveur n'a pas pu démarrer : une adresse IP de la configuration n'existe pas sur cette machine ({error})."
+        if error.errno in (errno.EADDRINUSE, 10048):
+            return f"Un serveur n'a pas pu démarrer : un port est déjà utilisé par un autre programme ({error})."
+        return f"Un serveur n'a pas pu démarrer : {error}"
     return str(error)
 
 
@@ -109,26 +116,6 @@ def wait_until_ready(url, errors, timeout=STARTUP_TIMEOUT):
             pass
         time.sleep(0.2)
     return f"Mini-OSC n'a pas répondu sur {url} en {timeout} secondes."
-
-
-def error_html(message, config_path, config_problem=False):
-    title = "Configuration illisible" if config_problem else "Mini-OSC n'a pas pu démarrer"
-    return f"""<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><title>{APP_NAME}</title>
-<style>
-  body {{ font-family: -apple-system, "Segoe UI", sans-serif; background: #1a1a2e; color: #eee; margin: 0; padding: 40px; }}
-  h1 {{ color: #ff6b6b; font-size: 22px; }}
-  pre {{ background: #0f0f1e; padding: 14px; border-radius: 6px; white-space: pre-wrap; word-break: break-word; }}
-  button {{ margin-top: 20px; padding: 8px 18px; font-size: 14px; cursor: pointer; }}
-</style></head>
-<body>
-  <h1>{html.escape(title)}</h1>
-  <pre>{html.escape(message)}</pre>
-  <p>Fichier de configuration :</p>
-  <pre>{html.escape(config_path)}</pre>
-  <p>Corrigez le fichier (ou libérez le port utilisé), puis relancez Mini-OSC.</p>
-  <button onclick="pywebview.api.quit()">Quitter</button>
-</body></html>"""
 
 
 def acquire_lock(port=LOCK_PORT):
@@ -207,12 +194,7 @@ def relaunch():
     os._exit(0)
 
 
-class WindowApi:
-    def quit(self):
-        os._exit(0)
-
-
-def open_window(url=None, page=None):
+def open_window(url=None, page=None, api=None):
     global _window
     use_system_gtk()
     import webview
@@ -220,7 +202,7 @@ def open_window(url=None, page=None):
     # Bouton Export de l'interface : le fichier est proposé dans une boîte d'enregistrement
     webview.settings["ALLOW_DOWNLOADS"] = True
     if page is not None:
-        _window = webview.create_window(APP_NAME, html=page, width=760, height=520, js_api=WindowApi())
+        _window = webview.create_window(APP_NAME, html=page, width=860, height=720, js_api=api)
     else:
         _window = webview.create_window(APP_NAME, url, width=1280, height=860, min_size=(800, 600))
     webview.start()
@@ -307,10 +289,13 @@ def main(argv=None):
     redirect_console(data_dir)
     config_path = ensure_config(data_dir, os.path.join(resource_dir(), "config.default.json"))
 
+    default_path = os.path.join(resource_dir(), "config.default.json")
+    repair_api = RepairApi(config_path, default_path, relaunch, mini_osc.open_in_file_manager)
+
     try:
         flask_cfg = mini_osc.load_config(config_path)["flask_server"]
     except mini_osc.ConfigError as e:
-        open_window(page=error_html(str(e), config_path, config_problem=True))
+        open_window(page=repair_html(str(e), config_path, cfg=None, config_problem=True), api=repair_api)
         os._exit(1)
 
     errors = []
@@ -320,8 +305,12 @@ def main(argv=None):
     if problem is None:
         open_window(url=url)
     else:
-        config_problem = bool(errors) and isinstance(errors[0], mini_osc.ConfigError)
-        open_window(page=error_html(problem, config_path, config_problem))
+        # La config est lisible : la page propose de corriger les IP et les ports des serveurs
+        try:
+            cfg = mini_osc.load_config(config_path)
+        except mini_osc.ConfigError:
+            cfg = None
+        open_window(page=repair_html(problem, config_path, cfg=cfg, config_problem=cfg is None), api=repair_api)
     # Fenêtre fermée : on arrête tout (les threads serveurs sont daemon, les ports sont libérés)
     os._exit(0)
 

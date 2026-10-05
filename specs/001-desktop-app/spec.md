@@ -138,6 +138,7 @@ Les installations actuelles lancées en script Python (`python mini_osc.py`, `St
 - **FR-019** *(ajout du 2026-10-05)*: L'opérateur MUST pouvoir exporter la configuration courante dans un fichier JSON de son choix.
 - **FR-020** *(ajout du 2026-10-05)*: L'opérateur MUST pouvoir importer un fichier de configuration (nouveau ou ancien format). Le fichier est validé avant d'être appliqué, un fichier invalide est refusé sans rien modifier, la configuration précédente est sauvegardée dans `backups/`, puis Mini-OSC redémarre.
 - **FR-021** *(ajout du 2026-10-05)*: L'icône macOS MUST s'afficher proprement sur macOS 26 (pas de cadre gris).
+- **FR-022** *(ajout du 2026-10-05)*: Quand les serveurs ne démarrent pas, la page d'erreur MUST permettre de réparer sans éditer le fichier à la main : IP et port de chaque serveur (OSC, HTTP, écoutes TCP/UDP) modifiables, IP absentes de la machine signalées, remplacement en un clic par 127.0.0.1, enregistrement puis redémarrage (avec confirmation si des IP restent introuvables), ouverture du dossier, retour à la config par défaut (l'actuelle gardée dans `backups/`).
 
 ### Key Entities
 

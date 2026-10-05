@@ -167,6 +167,7 @@
 - [X] T052 Routes `/get_data_paths` et `/open_folder` (requêtes locales uniquement) dans `mini_osc.py` ; chemin de la config dans l'onglet Servers, chemin des logs dans l'onglet Logs, boutons « Open folder » dans `index.html` (FR-018)
 - [X] T053 Routes `/export_config` et `/import_config` (validation par `validate_config`, sauvegarde dans `backups/`), boutons Export et Import, `ALLOW_DOWNLOADS` dans `desktop.py` (FR-019, FR-020)
 - [X] T054 Tests `tests/test_import_export.py` ; vérification dans l'app Mac : boîte d'enregistrement de l'export, sélection de fichier de l'import, redémarrage, sauvegarde, confirmation annulable
+- [X] T055 Page de réparation `desktop_repair.py` (FR-022) branchée dans `desktop.py`, messages d'erreur distincts IP introuvable / port occupé, tests `tests/test_repair.py`, vérifiée dans l'app avec la config de prod convertie (IP 192.168.66.100 absente du Mac)
 
 ---
 
