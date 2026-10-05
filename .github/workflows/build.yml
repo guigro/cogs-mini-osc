@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
   push:
     tags: ['v*']
-    # TEMPORAIRE pendant le développement de la branche, à retirer avant le merge
-    branches: ['feature/desktop-app']
 
 env:
   VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}
