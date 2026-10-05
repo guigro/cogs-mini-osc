@@ -844,6 +844,19 @@
                     <h3 class="title is-5"><span class="proto-tag proto-tag-udp" style="margin-right:0.5rem;">UDP</span> Listeners</h3>
                     <div id="udp-listeners-list"></div>
                 </div>
+                <!-- Configuration file -->
+                <div class="box mt-4" style="border-left: 4px solid var(--color-info);">
+                    <h3 class="title is-5"><i class="fas fa-file-code" style="margin-right:0.5rem; color:var(--color-info);"></i>Configuration</h3>
+                    <p style="color:var(--text-secondary); margin-bottom:0.4rem;">Configuration file:</p>
+                    <p><code id="config-file-path" style="word-break:break-all;">...</code></p>
+                    <div class="buttons mt-3">
+                        <button class="button is-info open-folder-btn" onclick="openFolder('data')"><i class="fas fa-folder-open" style="margin-right:0.4rem;"></i>Open folder</button>
+                        <a class="button is-primary" href="/export_config" download><i class="fas fa-download" style="margin-right:0.4rem;"></i>Export</a>
+                        <button class="button is-warning" onclick="document.getElementById('import-config-file').click()"><i class="fas fa-upload" style="margin-right:0.4rem;"></i>Import</button>
+                        <input type="file" id="import-config-file" accept=".json,application/json" style="display:none;" onchange="importConfig(this)">
+                    </div>
+                    <p style="color:var(--text-secondary); font-size:0.85rem;">Import replaces the current configuration, then restarts Mini-OSC. The previous file is kept in the <code>backups/</code> folder.</p>
+                </div>
             </div>
 
             <!-- Connections Management -->
@@ -1012,8 +1025,12 @@
                         </div>
                     </div>
                     <p style="color:var(--text-secondary); margin:0.75rem 0;">
-                        When enabled, all messages are saved to daily log files in the <code>logs/</code> directory with automatic rotation.
+                        When enabled, all messages are saved to daily log files with automatic rotation, in this folder:
                     </p>
+                    <p><code id="logs-dir-path" style="word-break:break-all;">logs/</code></p>
+                    <div class="buttons mt-2 mb-3">
+                        <button class="button is-info is-small open-folder-btn" onclick="openFolder('logs')"><i class="fas fa-folder-open" style="margin-right:0.4rem;"></i>Open folder</button>
+                    </div>
                     <div id="file-logging-settings" style="display:none;">
                         <div class="columns">
                             <div class="column is-half">
@@ -1171,8 +1188,8 @@
         // =====================
         // Restart Application
         // =====================
-        function restartApp() {
-            if (!confirm('Are you sure you want to restart the application? All connections will be briefly interrupted.')) {
+        function restartApp(skipConfirm) {
+            if (!skipConfirm && !confirm('Are you sure you want to restart the application? All connections will be briefly interrupted.')) {
                 return;
             }
             showToast("Restarting application...", "warning");
@@ -1852,6 +1869,69 @@
         }
 
         // =====================
+        // Data folder, import / export
+        // =====================
+        function fetchDataPaths() {
+            fetch('/get_data_paths')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('config-file-path').textContent = data.config_file;
+                    document.getElementById('logs-dir-path').textContent = data.logs_dir;
+                    // Ouvrir un dossier n'a de sens que sur la machine qui fait tourner Mini-OSC
+                    document.querySelectorAll('.open-folder-btn').forEach(btn => {
+                        btn.style.display = data.can_open ? '' : 'none';
+                    });
+                })
+                .catch(() => {});
+        }
+
+        function openFolder(target) {
+            fetch('/open_folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status !== 'success') showToast("Error: " + data.message, "error");
+            })
+            .catch(err => showToast("Error: " + err, "error"));
+        }
+
+        function importConfig(input) {
+            const file = input.files[0];
+            input.value = '';
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                let data;
+                try {
+                    data = JSON.parse(reader.result);
+                } catch (e) {
+                    showToast("Invalid JSON file: " + e.message, "error");
+                    return;
+                }
+                if (!confirm(`Replace the current configuration with "${file.name}"? Mini-OSC will restart.`)) return;
+                fetch('/import_config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                })
+                .then(res => res.json().then(body => ({ ok: res.ok, body })))
+                .then(({ ok, body }) => {
+                    if (!ok) {
+                        showToast("Import failed: " + body.message, "error");
+                        return;
+                    }
+                    showToast(`Configuration imported (${body.connections} connections). Restarting...`, "success");
+                    restartApp(true);
+                })
+                .catch(err => showToast("Error: " + err, "error"));
+            };
+            reader.readAsText(file);
+        }
+
+        // =====================
         // Local IP
         // =====================
         function fetchLocalIP() {
@@ -2188,6 +2268,7 @@
             fetchConfig();
             fetchLocalIP();
             fetchFileLoggingStatus();
+            fetchDataPaths();
             const connForm = document.getElementById('add-connection-form');
             if (connForm) {
                 connForm.addEventListener('input', updateRequestPreview);

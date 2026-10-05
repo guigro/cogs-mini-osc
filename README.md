@@ -34,7 +34,9 @@ The desktop app keeps `config.json` and the `logs/` folder in your user folder, 
 | Windows | `%APPDATA%\Mini-OSC\` |
 | Linux | `~/.config/mini-osc/` |
 
-On first launch a default config is created (HTTP interface on port 5009, OSC on 53000, no connections). To reuse an existing setup, quit the app and copy your `config.json` into that folder (old `targets` + `routes` configs are converted automatically). If the file is unreadable, the window says so and leaves it untouched. The exact path is also written in the Logs tab at startup.
+On first launch a default config is created (HTTP interface on port 5009, OSC on 53000, no connections). The exact paths are shown in the app (Servers tab for the config, Logs tab for the logs), each with an **Open folder** button. If the config file is unreadable, the window says so and leaves it untouched.
+
+**Import / Export**: in the Servers tab, *Export* saves the current configuration to a JSON file, *Import* loads one (old `targets` + `routes` configs are converted automatically). An imported file is checked first; the previous config is kept in the `backups/` folder, then Mini-OSC restarts.
 
 To update, download the new version and replace the old one. Settings are kept.
 

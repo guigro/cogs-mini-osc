@@ -134,6 +134,10 @@ Les installations actuelles lancées en script Python (`python mini_osc.py`, `St
 - **FR-015**: Le lancement en script Python MUST continuer de fonctionner avec un `config.json` situé à côté du script, comme aujourd'hui.
 - **FR-016**: La documentation MUST indiquer pour chaque système comment télécharger, ouvrir la première fois (avertissements de sécurité et pare-feu), et où se trouvent la configuration et les logs.
 - **FR-017**: L'opérateur MUST pouvoir connaître l'emplacement du fichier de configuration utilisé (dans la documentation et dans les logs au démarrage).
+- **FR-018** *(ajout du 2026-10-05)*: L'interface MUST afficher le chemin complet du fichier de configuration (onglet Servers) et du dossier des logs (onglet Logs), avec un bouton « Open folder » qui ouvre ce dossier dans le gestionnaire de fichiers. Ce bouton n'est proposé que sur la machine qui fait tourner Mini-OSC.
+- **FR-019** *(ajout du 2026-10-05)*: L'opérateur MUST pouvoir exporter la configuration courante dans un fichier JSON de son choix.
+- **FR-020** *(ajout du 2026-10-05)*: L'opérateur MUST pouvoir importer un fichier de configuration (nouveau ou ancien format). Le fichier est validé avant d'être appliqué, un fichier invalide est refusé sans rien modifier, la configuration précédente est sauvegardée dans `backups/`, puis Mini-OSC redémarre.
+- **FR-021** *(ajout du 2026-10-05)*: L'icône macOS MUST s'afficher proprement sur macOS 26 (pas de cadre gris).
 
 ### Key Entities
 

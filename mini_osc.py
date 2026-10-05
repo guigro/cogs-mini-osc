@@ -3,7 +3,9 @@ import re
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
+import shutil
+import subprocess
 from flask_cors import CORS
 import os
 import threading
@@ -221,6 +223,13 @@ def load_config(filename):
         raise ConfigError(f"File {filename} can't be found.")
     except json.JSONDecodeError as e:
         raise ConfigError(f"Error parsing JSON in {filename} : {e}")
+    return validate_config(cfg)
+
+
+def validate_config(cfg):
+    """Migre l'ancien format, vérifie les sections obligatoires et complète les valeurs par défaut."""
+    if not isinstance(cfg, dict):
+        raise ConfigError("Invalid configuration : a JSON object is expected.")
 
     # Auto-migrate old format
     cfg = migrate_config(cfg)
@@ -424,6 +433,79 @@ def update_file_logging():
     status = "enabled" if config['file_logging']['enabled'] else "disabled"
     add_log(f"File logging {status}")
     return jsonify({"status": "success"})
+
+def is_local_request():
+    return request.remote_addr in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+
+def open_in_file_manager(path):
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", path])
+    elif sys.platform.startswith("win"):
+        os.startfile(path)
+    else:
+        # AppImage : PyInstaller modifie LD_LIBRARY_PATH, xdg-open doit retrouver celui du système
+        env = dict(os.environ)
+        if "LD_LIBRARY_PATH_ORIG" in env:
+            env["LD_LIBRARY_PATH"] = env["LD_LIBRARY_PATH_ORIG"]
+        else:
+            env.pop("LD_LIBRARY_PATH", None)
+        subprocess.Popen(["xdg-open", path], env=env)
+
+
+@app.route('/get_data_paths', methods=['GET'])
+def get_data_paths():
+    return jsonify({
+        "data_dir": DATA_DIR,
+        "config_file": CONFIG_FILE,
+        "logs_dir": os.path.join(DATA_DIR, "logs"),
+        "can_open": is_local_request()
+    })
+
+
+@app.route('/open_folder', methods=['POST'])
+def open_folder():
+    # Ouvre le dossier sur l'écran de la machine qui fait tourner Mini-OSC : réservé aux requêtes locales
+    if not is_local_request():
+        return jsonify({"status": "error", "message": "Only available on the machine running Mini-OSC"}), 403
+    target = (request.json or {}).get("target", "data")
+    path = os.path.join(DATA_DIR, "logs") if target == "logs" else DATA_DIR
+    os.makedirs(path, exist_ok=True)
+    try:
+        open_in_file_manager(path)
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    return jsonify({"status": "success", "path": path})
+
+
+@app.route('/export_config', methods=['GET'])
+def export_config():
+    name = f"mini-osc-config-{datetime.now().strftime('%Y-%m-%d')}.json"
+    return send_file(CONFIG_FILE, mimetype="application/json", as_attachment=True, download_name=name, max_age=0)
+
+
+@app.route('/import_config', methods=['POST'])
+def import_config():
+    try:
+        new_cfg = validate_config(request.get_json(force=True, silent=False))
+    except ConfigError as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+    except Exception:
+        return jsonify({"status": "error", "message": "The file is not valid JSON."}), 400
+
+    # Sauvegarde de la config actuelle avant de la remplacer
+    backup_dir = os.path.join(DATA_DIR, "backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    backup = os.path.join(backup_dir, f"config-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json")
+    if os.path.exists(CONFIG_FILE):
+        shutil.copyfile(CONFIG_FILE, backup)
+
+    save_config(new_cfg)
+    expand_connections(new_cfg)
+    setup_file_logging(new_cfg)
+    add_log(f"Configuration imported ({len(new_cfg['connections'])} connections). Previous config saved to {backup}")
+    return jsonify({"status": "success", "backup": backup, "connections": len(new_cfg["connections"])})
+
 
 @app.route('/get_file_logging_status', methods=['GET'])
 def get_file_logging_status():

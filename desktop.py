@@ -217,6 +217,8 @@ def open_window(url=None, page=None):
     use_system_gtk()
     import webview
 
+    # Bouton Export de l'interface : le fichier est proposé dans une boîte d'enregistrement
+    webview.settings["ALLOW_DOWNLOADS"] = True
     if page is not None:
         _window = webview.create_window(APP_NAME, html=page, width=760, height=520, js_api=WindowApi())
     else:
