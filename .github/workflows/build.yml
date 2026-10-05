@@ -23,9 +23,9 @@ jobs:
             arch: intel
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -41,7 +41,7 @@ jobs:
           PYTHON: python
           ARCH: ${{ matrix.arch }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}
           path: dist/*.dmg
@@ -54,9 +54,9 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -75,7 +75,7 @@ jobs:
       - name: Rename
         run: mv dist/Mini-OSC.exe "dist/Mini-OSC-${VERSION}-windows-x64.exe"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-x64
           path: dist/*.exe
@@ -87,9 +87,9 @@ jobs:
     env:
       APPIMAGE_EXTRACT_AND_RUN: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -117,13 +117,13 @@ jobs:
       - name: Window test (virtual screen)
         run: packaging/ci_window_test_linux.sh linux-22.04.png dbus-run-session -- dist/*.AppImage
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-x86_64
           path: dist/*.AppImage
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: screenshot-linux-22.04
@@ -136,14 +136,14 @@ jobs:
     needs: linux
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: System packages (runtime only)
         run: |
           sudo apt-get update
           sudo apt-get install -y gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 xvfb imagemagick x11-utils dbus-x11
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: linux-x86_64
           path: dist
@@ -153,7 +153,7 @@ jobs:
           chmod +x dist/*.AppImage
           packaging/ci_window_test_linux.sh linux-24.04.png dbus-run-session -- dist/*.AppImage
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: screenshot-linux-24.04
@@ -168,7 +168,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           pattern: '{macos-*,windows-*,linux-x86_64}'
