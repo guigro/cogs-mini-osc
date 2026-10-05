@@ -22,7 +22,7 @@ def make_cfg():
 def test_listeners_cover_servers_and_tcp_udp_sources():
     items = listeners_from_config(make_cfg())
     assert [(i["key"], i["index"]) for i in items] == [("osc_server", -1), ("flask_server", -1), ("connection", 1)]
-    assert items[2]["label"] == "TCP to cogs (écoute TCP)"
+    assert items[2]["label"] == "TCP to cogs (TCP listener)"
     assert items[2]["ip"] == "192.168.66.100" and items[2]["port"] == 57676
 
 
@@ -39,7 +39,7 @@ def test_apply_edits_changes_only_listen_addresses():
 
 
 @pytest.mark.parametrize("ip,port,message", [
-    ("192.168.1", "53000", "adresse IP"),
+    ("192.168.1", "53000", "valid IP address"),
     ("127.0.0.1", "0", "port"),
     ("127.0.0.1", "70000", "port"),
     ("127.0.0.1", "abc", "port"),
@@ -47,7 +47,7 @@ def test_apply_edits_changes_only_listen_addresses():
 def test_apply_edits_rejects_invalid_values(ip, port, message):
     cfg = make_cfg()
     with pytest.raises(ValueError, match=message):
-        apply_listener_edits(cfg, [{"key": "osc_server", "index": -1, "label": "Serveur OSC", "ip": ip, "port": port}])
+        apply_listener_edits(cfg, [{"key": "osc_server", "index": -1, "label": "OSC server", "ip": ip, "port": port}])
 
 
 def test_ip_available():
@@ -59,15 +59,15 @@ def test_ip_available():
 
 def test_repair_page_flags_missing_ips():
     page = repair_html("boom", "/x/config.json", cfg=make_cfg())
-    assert page.count("IP introuvable sur cette machine") == 3
-    assert "Enregistrer et redémarrer" in page
+    assert page.count("This IP does not exist on this computer") == 3
+    assert "Save and restart" in page
 
 
 def test_repair_page_without_readable_config_has_no_editor():
     page = repair_html("bad json", "/x/config.json", cfg=None, config_problem=True)
-    assert "Configuration illisible" in page
-    assert "Enregistrer et redémarrer" not in page
-    assert "Revenir à la config par défaut" in page
+    assert "Unreadable configuration" in page
+    assert "Save and restart" not in page
+    assert "Restore default configuration" in page
 
 
 def test_save_writes_config_backs_up_and_relaunches(tmp_path):
@@ -88,8 +88,8 @@ def test_save_with_invalid_value_returns_error_and_keeps_file(tmp_path):
     original = json.dumps(make_cfg())
     path.write_text(original, encoding="utf-8")
     api = RepairApi(str(path), "unused", lambda: pytest.fail("ne doit pas redémarrer"), lambda p: None)
-    res = api.save([{"key": "osc_server", "index": -1, "label": "Serveur OSC", "ip": "999.1.1.1", "port": "53000"}])
-    assert "adresse IP" in res["error"]
+    res = api.save([{"key": "osc_server", "index": -1, "label": "OSC server", "ip": "999.1.1.1", "port": "53000"}])
+    assert "valid IP address" in res["error"]
     assert path.read_text(encoding="utf-8") == original
 
 

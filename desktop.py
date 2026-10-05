@@ -89,14 +89,14 @@ def start_engine(errors):
 def describe_error(error, url):
     # Werkzeug fait sys.exit(1) quand le port HTTP est déjà pris
     if isinstance(error, SystemExit):
-        return f"Le serveur HTTP n'a pas pu démarrer sur {url} : le port est probablement déjà utilisé par un autre programme."
+        return f"The HTTP server could not start on {url}: the port is probably already used by another program."
     if isinstance(error, OSError):
         # EADDRNOTAVAIL (macOS 49, Linux 99, Windows 10049) / EADDRINUSE (48, 98, 10048)
         if error.errno in (errno.EADDRNOTAVAIL, 10049):
-            return f"Un serveur n'a pas pu démarrer : une adresse IP de la configuration n'existe pas sur cette machine ({error})."
+            return f"A server could not start: an IP address in the configuration does not exist on this computer ({error})."
         if error.errno in (errno.EADDRINUSE, 10048):
-            return f"Un serveur n'a pas pu démarrer : un port est déjà utilisé par un autre programme ({error})."
-        return f"Un serveur n'a pas pu démarrer : {error}"
+            return f"A server could not start: a port is already used by another program ({error})."
+        return f"A server could not start: {error}"
     return str(error)
 
 
@@ -115,7 +115,7 @@ def wait_until_ready(url, errors, timeout=STARTUP_TIMEOUT):
         except Exception:
             pass
         time.sleep(0.2)
-    return f"Mini-OSC n'a pas répondu sur {url} en {timeout} secondes."
+    return f"Mini-OSC did not respond on {url} within {timeout} seconds."
 
 
 def acquire_lock(port=LOCK_PORT):
@@ -255,8 +255,8 @@ def smoke_test():
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(prog=APP_NAME)
-    parser.add_argument("--wait-lock", action="store_true", help="utilisé par le Restart : attendre la fin de l'instance précédente")
-    parser.add_argument("--smoke-test", action="store_true", help="démarrer sans fenêtre, vérifier l'interface, puis quitter")
+    parser.add_argument("--wait-lock", action="store_true", help="used by Restart: wait for the previous instance to exit")
+    parser.add_argument("--smoke-test", action="store_true", help="start without a window, check the web interface, then exit")
     # Le Finder peut ajouter -psn_XXX sur macOS : on ignore les arguments inconnus
     args, _unknown = parser.parse_known_args(argv)
     return args

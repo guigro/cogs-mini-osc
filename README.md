@@ -187,7 +187,7 @@ Example: if the API returns `{"status": "ok", "score": 42, "data": [1,2,3]}`, Co
 
 #### OSC to JSON (raw)
 
-Send an arbitrary JSON body to any HTTP endpoint. The **first OSC argument** is sent as-is as the request body with `Content-Type: application/json` — no wrapper, no transformation.
+Send an arbitrary JSON body to any HTTP endpoint. The **first OSC argument** is sent as-is as the request body with `Content-Type: application/json`: no wrapper, no transformation.
 
 Useful for devices/APIs that expect a specific JSON schema (WLED, Home Assistant, Hue, custom REST endpoints, etc.).
 
@@ -238,7 +238,7 @@ oscsend 192.168.50.226 53000 /wled/state/on i 1
 
 Notes:
 - If the incoming address matches the pattern **exactly** (no sub-address), the optional `to.address` field is used as a fallback forwarding address; if it is not set, the message is dropped and a warning is logged.
-- The `values` mapping does not apply to OSC destinations — arguments stay a positional list.
+- The `values` mapping does not apply to OSC destinations: arguments stay a positional list.
 - Connection order matters: the first matching connection wins.
 
 ## Web Interface
@@ -310,7 +310,7 @@ JSON payload over a UDP datagram: `{"address": "/pattern", "args": [1, 2, 3]}`
 
 #### JSON (raw)
 
-The first OSC argument is sent as the raw POST body with `Content-Type: application/json`. No `{"address": ..., "args": ...}` wrapper is added — useful when the target device expects its own schema.
+The first OSC argument is sent as the raw POST body with `Content-Type: application/json`. No `{"address": ..., "args": ...}` wrapper is added. Useful when the target device expects its own schema.
 
 ## API Endpoints
 

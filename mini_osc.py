@@ -839,7 +839,7 @@ def handle_osc_in_message(address, args):
                 add_log(f"[OSC→OSC] {address} → forwarded as {sub_address} to {target['ip']}:{target['port']}")
             else:
                 msg = (f"[OSC→OSC] {address} matched pattern {pattern} exactly but has no "
-                       f"sub-address and no fallback OSC Address is set — nothing sent")
+                       f"sub-address and no fallback OSC Address is set, nothing sent")
                 print(msg)
                 add_log(msg, "WARNING")
         elif ttype == "http":

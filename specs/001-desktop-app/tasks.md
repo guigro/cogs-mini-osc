@@ -168,6 +168,7 @@
 - [X] T053 Routes `/export_config` et `/import_config` (validation par `validate_config`, sauvegarde dans `backups/`), boutons Export et Import, `ALLOW_DOWNLOADS` dans `desktop.py` (FR-019, FR-020)
 - [X] T054 Tests `tests/test_import_export.py` ; vérification dans l'app Mac : boîte d'enregistrement de l'export, sélection de fichier de l'import, redémarrage, sauvegarde, confirmation annulable
 - [X] T055 Page de réparation `desktop_repair.py` (FR-022) branchée dans `desktop.py`, messages d'erreur distincts IP introuvable / port occupé, tests `tests/test_repair.py`, vérifiée dans l'app avec la config de prod convertie (IP 192.168.66.100 absente du Mac)
+- [X] T056 Textes de la page d'erreur et des messages du lanceur en anglais (l'app est partagée avec des utilisateurs anglophones) ; suppression des tirets longs restants dans README, index.html, install.sh, mini_osc.py et docs/
 
 ---
 

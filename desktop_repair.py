@@ -18,16 +18,16 @@ ALL_INTERFACES = ("0.0.0.0", "::", "")
 def listeners_from_config(cfg):
     """Tout ce qui écoute sur une IP et un port : serveur OSC, serveur HTTP, sources TCP/UDP des connexions."""
     listeners = [
-        {"key": "osc_server", "index": -1, "label": "Serveur OSC",
+        {"key": "osc_server", "index": -1, "label": "OSC server",
          "ip": cfg["osc_server"].get("listen_ip", ""), "port": cfg["osc_server"].get("listen_port", "")},
-        {"key": "flask_server", "index": -1, "label": "Serveur HTTP (interface)",
+        {"key": "flask_server", "index": -1, "label": "HTTP server (web interface)",
          "ip": cfg["flask_server"].get("ip", ""), "port": cfg["flask_server"].get("port", "")},
     ]
     for i, conn in enumerate(cfg.get("connections", [])):
         fr = conn.get("from", {})
         if fr.get("protocol") in ("tcp", "udp"):
-            name = conn.get("name") or f"Connexion {i + 1}"
-            listeners.append({"key": "connection", "index": i, "label": f"{name} (écoute {fr['protocol'].upper()})",
+            name = conn.get("name") or f"Connection {i + 1}"
+            listeners.append({"key": "connection", "index": i, "label": f"{name} ({fr['protocol'].upper()} listener)",
                               "ip": fr.get("listen_ip", ""), "port": fr.get("listen_port", "")})
     return listeners
 
@@ -42,9 +42,9 @@ def apply_listener_edits(cfg, edits):
             try:
                 ipaddress.ip_address(ip)
             except ValueError:
-                raise ValueError(f"{label} : « {ip} » n'est pas une adresse IP valide.")
+                raise ValueError(f"{label}: \"{ip}\" is not a valid IP address.")
         if not port_text.isdigit() or not 1 <= int(port_text) <= 65535:
-            raise ValueError(f"{label} : le port doit être un nombre entre 1 et 65535.")
+            raise ValueError(f"{label}: the port must be a number between 1 and 65535.")
         port = int(port_text)
 
         key = edit.get("key")
@@ -115,8 +115,8 @@ class RepairApi:
             return {"error": str(e)}
         missing = sorted({str(e.get("ip", "")).strip() for e in edits if not ip_available(str(e.get("ip", "")).strip())})
         if missing and not force:
-            return {"warning": f"Ces IP n'existent pas sur cette machine : {', '.join(missing)}. "
-                               "Mini-OSC ne pourra pas démarrer ici. Enregistrer quand même (par exemple pour une autre machine) ?"}
+            return {"warning": f"These IP addresses do not exist on this computer: {', '.join(missing)}. "
+                               "Mini-OSC will not be able to start here. Save anyway (for example for another computer)?"}
         backup_config(self.config_path)
         with open(self.config_path, "w", encoding="utf-8") as f:
             json.dump(cfg, f, indent=4, ensure_ascii=False)
@@ -136,7 +136,7 @@ class RepairApi:
 
 def repair_html(message, config_path, cfg=None, config_problem=False):
     """Page d'erreur. cfg est la config lisible (champs modifiables) ou None si elle est illisible."""
-    title = "Configuration illisible" if config_problem else "Mini-OSC n'a pas pu démarrer"
+    title = "Unreadable configuration" if config_problem else "Mini-OSC could not start"
     suggestions = "".join(f'<option value="{html.escape(ip)}">' for ip in local_ip_suggestions())
 
     if cfg is not None:
@@ -147,24 +147,24 @@ def repair_html(message, config_path, cfg=None, config_problem=False):
       <tr class="listener" data-key="{item['key']}" data-index="{item['index']}" data-label="{html.escape(item['label'])}">
         <td>{html.escape(item['label'])}</td>
         <td><input class="ip{'' if ok else ' bad'}" list="ips" value="{html.escape(str(item['ip']))}" data-ok="{'1' if ok else '0'}">
-            {'' if ok else '<div class="hint">IP introuvable sur cette machine</div>'}</td>
+            {'' if ok else '<div class="hint">This IP does not exist on this computer</div>'}</td>
         <td><input class="port" type="number" min="1" max="65535" value="{html.escape(str(item['port']))}"></td>
       </tr>""")
         editor = f"""
-  <h2>Serveurs</h2>
+  <h2>Servers</h2>
   <table>
     <tr><th></th><th>IP</th><th>Port</th></tr>{''.join(rows)}
   </table>
   <datalist id="ips">{suggestions}</datalist>
   <div class="actions">
-    <button class="secondary" onclick="useLoopback()">Remplacer les IP introuvables par 127.0.0.1</button>
-    <button class="primary" onclick="save()">Enregistrer et redémarrer</button>
+    <button class="secondary" onclick="useLoopback()">Replace missing IPs with 127.0.0.1</button>
+    <button class="primary" onclick="save()">Save and restart</button>
   </div>"""
     else:
         editor = ""
 
     return f"""<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><title>Mini-OSC</title>
+<html lang="en"><head><meta charset="utf-8"><title>Mini-OSC</title>
 <style>
   body {{ font-family: -apple-system, "Segoe UI", sans-serif; background: #1a1a2e; color: #eee; margin: 0; padding: 32px 40px; }}
   h1 {{ color: #ff6b6b; font-size: 22px; margin-top: 0; }}
@@ -186,15 +186,15 @@ def repair_html(message, config_path, cfg=None, config_problem=False):
 <body>
   <h1>{html.escape(title)}</h1>
   <pre>{html.escape(message)}</pre>
-  <p style="margin-bottom:0">Fichier de configuration :</p>
+  <p style="margin-bottom:0">Configuration file:</p>
   <pre>{html.escape(config_path)}</pre>
   {editor}
   <div id="msg"></div>
-  <h2>Autres actions</h2>
+  <h2>Other actions</h2>
   <div class="actions">
-    <button onclick="pywebview.api.open_folder()">Ouvrir le dossier</button>
-    <button onclick="restoreDefault()">Revenir à la config par défaut</button>
-    <button onclick="pywebview.api.quit()">Quitter</button>
+    <button onclick="pywebview.api.open_folder()">Open folder</button>
+    <button onclick="restoreDefault()">Restore default configuration</button>
+    <button onclick="pywebview.api.quit()">Quit</button>
   </div>
 <script>
   function useLoopback() {{
@@ -216,7 +216,7 @@ def repair_html(message, config_path, cfg=None, config_problem=False):
     if (res && res.error) document.getElementById('msg').textContent = res.error;
   }}
   function restoreDefault() {{
-    if (confirm("Remplacer la configuration par la configuration par défaut ? L'actuelle sera gardée dans le dossier backups/.")) {{
+    if (confirm("Replace the configuration with the default one? The current file will be kept in the backups/ folder.")) {{
       pywebview.api.restore_default();
     }}
   }}
