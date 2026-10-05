@@ -2,7 +2,45 @@
 
 A protocol bridge that converts and routes messages between **OSC**, **HTTP**, **TCP**, **UDP**, and **raw JSON**. Designed to help [Cogs](https://cogs.show) communicate with network devices and external services.
 
-## Quick Start
+## Desktop app (recommended)
+
+Mini-OSC is available as a standalone app with its own window. No Python needed. Download the file for your system from the [latest release](https://github.com/guigro/cogs-mini-osc/releases/latest):
+
+| System | File |
+|---|---|
+| macOS, Apple Silicon (M1 and later) | `Mini-OSC-<version>-macos-arm64.dmg` |
+| macOS, Intel | `Mini-OSC-<version>-macos-intel.dmg` |
+| Windows 10/11 (64-bit) | `Mini-OSC-<version>-windows-x64.exe` |
+| Linux PC (x86_64) | `Mini-OSC-<version>-linux-x86_64.AppImage` |
+
+Launch it: the servers start and the usual interface opens in a window. **Closing the window quits Mini-OSC.** Only one instance runs at a time: launching it again brings the existing window back.
+
+### First launch
+
+The app is not signed, so each system asks for confirmation once:
+
+- **macOS**: open the `.dmg` and drag Mini-OSC into Applications. At first launch macOS blocks it: go to *System Settings > Privacy & Security* and click *Open Anyway*. Alternative, in a terminal: `xattr -dr com.apple.quarantine /Applications/Mini-OSC.app`.
+- **Windows**: SmartScreen shows "Windows protected your PC": click *More info* then *Run anyway*.
+- **Linux**: make the file executable (`chmod +x Mini-OSC-*.AppImage`) and run it. It needs WebKitGTK, present on most desktops (Ubuntu 22.04+, Debian 12+); otherwise: `sudo apt install libwebkit2gtk-4.1-0 gir1.2-webkit2-4.1`.
+- **Firewall**: macOS and Windows ask to allow incoming connections, since Mini-OSC listens on the network. Allow it.
+
+### Where are my settings?
+
+The desktop app keeps `config.json` and the `logs/` folder in your user folder, so they survive app updates:
+
+| System | Folder |
+|---|---|
+| macOS | `~/Library/Application Support/Mini-OSC/` |
+| Windows | `%APPDATA%\Mini-OSC\` |
+| Linux | `~/.config/mini-osc/` |
+
+On first launch a default config is created (HTTP interface on port 5009, OSC on 53000, no connections). The exact paths are shown in the app (Servers tab for the config, Logs tab for the logs), each with an **Open folder** button. If Mini-OSC cannot start (for example a config from another machine, listening on an IP this computer does not have, or a port already in use), the window lists each server with its IP and port so you can fix them and restart, replace missing IPs with `127.0.0.1` in one click, open the folder, or go back to the default config. The previous file is always kept in `backups/`. If the config file is unreadable, it is left untouched.
+
+**Import / Export**: in the Servers tab, *Export* saves the current configuration to a JSON file, *Import* loads one (old `targets` + `routes` configs are converted automatically). An imported file is checked first; the previous config is kept in the `backups/` folder, then Mini-OSC restarts.
+
+To update, download the new version and replace the old one. Settings are kept.
+
+## Run from source
 
 ### Automatic installation
 
@@ -36,6 +74,10 @@ Double-click `Start_OSC_Webapp.command` to launch everything automatically (venv
 
 Once running, open **http://127.0.0.1:5000** (or your configured IP/port) in a browser.
 
+In this mode, `config.json` and `logs/` stay next to `mini_osc.py` (even if you launch it from another folder).
+
+To run the desktop window from source: `pip install -r requirements-desktop.txt` then `python desktop.py`. To build the apps yourself: `packaging/build_macos.sh`, `packaging/build_linux.sh`, or `pyinstaller packaging/mini_osc.spec` on Windows. Pushing a `v*` tag builds all four files on GitHub Actions and publishes a release.
+
 ## How It Works
 
 Mini-OSC acts as a bridge between protocols. You define **connections** that describe a **source** (from) and a **destination** (to). When a message arrives on the source, it gets converted and forwarded to the destination.
@@ -47,7 +89,7 @@ Cogs  <--OSC--  Mini-OSC  <--HTTP/TCP/UDP--  Device / API
 
 ## Configuration
 
-All settings are in `config.json`. The web interface lets you edit everything visually.
+All settings are in `config.json` (see [Where are my settings?](#where-are-my-settings) for the desktop app). The web interface lets you edit everything visually.
 
 ### Servers
 
@@ -145,7 +187,7 @@ Example: if the API returns `{"status": "ok", "score": 42, "data": [1,2,3]}`, Co
 
 #### OSC to JSON (raw)
 
-Send an arbitrary JSON body to any HTTP endpoint. The **first OSC argument** is sent as-is as the request body with `Content-Type: application/json` — no wrapper, no transformation.
+Send an arbitrary JSON body to any HTTP endpoint. The **first OSC argument** is sent as-is as the request body with `Content-Type: application/json`: no wrapper, no transformation.
 
 Useful for devices/APIs that expect a specific JSON schema (WLED, Home Assistant, Hue, custom REST endpoints, etc.).
 
@@ -196,7 +238,7 @@ oscsend 192.168.50.226 53000 /wled/state/on i 1
 
 Notes:
 - If the incoming address matches the pattern **exactly** (no sub-address), the optional `to.address` field is used as a fallback forwarding address; if it is not set, the message is dropped and a warning is logged.
-- The `values` mapping does not apply to OSC destinations — arguments stay a positional list.
+- The `values` mapping does not apply to OSC destinations: arguments stay a positional list.
 - Connection order matters: the first matching connection wins.
 
 ## Web Interface
@@ -268,7 +310,7 @@ JSON payload over a UDP datagram: `{"address": "/pattern", "args": [1, 2, 3]}`
 
 #### JSON (raw)
 
-The first OSC argument is sent as the raw POST body with `Content-Type: application/json`. No `{"address": ..., "args": ...}` wrapper is added — useful when the target device expects its own schema.
+The first OSC argument is sent as the raw POST body with `Content-Type: application/json`. No `{"address": ..., "args": ...}` wrapper is added. Useful when the target device expects its own schema.
 
 ## API Endpoints
 

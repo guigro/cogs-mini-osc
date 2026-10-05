@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ================================
-# Mini-OSC for Cogs — Installer
+# Mini-OSC for Cogs: Installer
 # ================================
 
 set -e
@@ -9,7 +9,7 @@ set -e
 cd "$(dirname "$0")"
 
 echo "==================================="
-echo "  Mini-OSC for Cogs — Installation"
+echo "  Mini-OSC for Cogs: Installation"
 echo "==================================="
 echo ""
 

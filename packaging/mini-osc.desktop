@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Mini-OSC
+Comment=Passerelle OSC, HTTP, TCP et UDP pour Cogs
+Exec=Mini-OSC
+Icon=mini-osc
+Categories=Network;
+Terminal=false

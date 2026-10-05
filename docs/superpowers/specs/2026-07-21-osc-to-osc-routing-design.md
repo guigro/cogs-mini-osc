@@ -1,4 +1,4 @@
-# OSC → OSC Device-Prefix Routing — Design
+# OSC → OSC Device-Prefix Routing: Design
 
 Date: 2026-07-21
 Status: Approved
@@ -24,7 +24,7 @@ Incoming `/wled/state/on` with args `[1]` → forwards `/state/on` with args `[1
 - The `values` mapping does not apply to OSC destinations (args stay a
   positional list). The UI hides the Values field for OSC → OSC connections and
   the saved config omits `values` in that case.
-- First matching route wins (existing behavior — connection order matters).
+- First matching route wins (existing behavior: connection order matters).
 - Prefix matching applies **only** when the destination protocol is `osc`;
   matching for all other destination types stays strictly exact.
 - Logs: `[OSC→OSC] /wled/state/on → forwarded as /state/on to 192.168.1.63:9000`.
@@ -54,7 +54,7 @@ No new fields. An OSC → OSC connection reuses the existing shape:
 No changes needed in `expand_connections()` (OSC targets and `to.address` are
 already expanded).
 
-### Frontend (`index.html`) — documented in English
+### Frontend (`index.html`), documented in English
 
 - Static help panel (`#osc-osc-help`) shown between the form columns and the
   preview when source = OSC and destination = OSC, explaining device-prefix
