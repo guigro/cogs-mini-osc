@@ -27,7 +27,7 @@ a = Analysis(
         (os.path.join(ROOT, "vendor"), "vendor"),
     ],
     # Sous Linux, gi charge ses overrides Python dynamiquement ; les typelibs viennent du système
-    hiddenimports=["mini_osc"] + (
+    hiddenimports=["mini_osc", "multiball"] + (
         ["gi", "cairo", "webview.platforms.gtk"] + collect_submodules("gi.overrides")
         if sys.platform.startswith("linux") else []
     ),

@@ -373,6 +373,53 @@
             border: 1px solid rgba(232, 67, 147, 0.35);
         }
 
+        .proto-tag-multiball {
+            background-color: rgba(225, 112, 85, 0.18);
+            color: #e17055;
+            border: 1px solid rgba(225, 112, 85, 0.35);
+        }
+
+        /* Multiball : listes du bouton Test and list et aide-mémoire */
+        .mb-panel {
+            margin-top: 1rem;
+            background: var(--bg-card-nested);
+            color: var(--text-primary);
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            font-size: 0.85rem;
+        }
+
+        .mb-list {
+            max-height: 320px;
+            overflow-y: auto;
+            margin-top: 0.4rem;
+        }
+
+        .mb-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.35rem 0.4rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .mb-row:last-child { border-bottom: none; }
+
+        .mb-row.is-clickable { cursor: pointer; border-radius: 4px; }
+        .mb-row.is-clickable:hover { background: var(--bg-table-hover); }
+        .mb-row.is-selected { box-shadow: inset 0 0 0 2px #e17055; }
+
+        .mb-row .mb-main { flex: 1; min-width: 0; }
+        .mb-row .mb-sub { color: var(--text-secondary); font-size: 0.78rem; overflow-wrap: anywhere; }
+
+        #multiball-help { margin-bottom: 1rem; }
+
+        .mb-error { color: #e74c3c; font-weight: 600; margin-top: 0.4rem; word-break: break-word; }
+
+        .mb-cheatsheet td { padding: 0.2rem 0.6rem 0.2rem 0 !important; border: none !important; vertical-align: top !important; }
+        .mb-cheatsheet code { white-space: nowrap; }
+
         /* ========================================
            Table
            ======================================== */
@@ -851,11 +898,14 @@
                     <p><code id="config-file-path" style="word-break:break-all;">...</code></p>
                     <div class="buttons mt-3">
                         <button class="button is-info open-folder-btn" onclick="openFolder('data')"><i class="fas fa-folder-open" style="margin-right:0.4rem;"></i>Open folder</button>
-                        <a class="button is-primary" href="/export_config" download><i class="fas fa-download" style="margin-right:0.4rem;"></i>Export</a>
+                        <button class="button is-primary" onclick="exportConfig()"><i class="fas fa-download" style="margin-right:0.4rem;"></i>Export</button>
                         <button class="button is-warning" onclick="document.getElementById('import-config-file').click()"><i class="fas fa-upload" style="margin-right:0.4rem;"></i>Import</button>
                         <input type="file" id="import-config-file" accept=".json,application/json" style="display:none;" onchange="importConfig(this)">
                     </div>
-                    <p style="color:var(--text-secondary); font-size:0.85rem;">Import replaces the current configuration, then restarts Mini-OSC. The previous file is kept in the <code>backups/</code> folder.</p>
+                    <label class="checkbox" style="color:var(--text-secondary); font-size:0.85rem; display:block; margin-bottom:0.4rem;">
+                        <input type="checkbox" id="export-include-secrets"> Include Multiball tokens in the export
+                    </label>
+                    <p style="color:var(--text-secondary); font-size:0.85rem;">By default, Multiball tokens are left out of the export, and re-importing on this machine keeps the saved ones. Import replaces the current configuration, then restarts Mini-OSC. The previous file is kept in the <code>backups/</code> folder.</p>
                 </div>
             </div>
 
@@ -932,6 +982,7 @@
                                         <option value="udp">UDP</option>
                                         <option value="http">HTTP</option>
                                         <option value="json">JSON (raw)</option>
+                                        <option value="multiball">Multiball (LYMB API)</option>
                                     </select>
                                 </div>
                             </div>
@@ -949,6 +1000,8 @@
                             <li>If the incoming address matches the pattern exactly (no sub-address), the optional <em>OSC Address</em> field of the destination is used as a fallback; if it is empty, the message is dropped and a warning is logged.</li>
                         </ul>
                     </div>
+
+                    <div id="multiball-help" class="mb-panel" style="display:none;"></div>
 
                     <div id="request-preview" style="display:none; margin-top:1rem;">
                         <label class="label" style="font-size:0.85rem;">Request preview</label>
@@ -1251,6 +1304,13 @@
                 return label + s;
             } else if (to.protocol === 'json') {
                 return label + `${tag} <small>POST</small> <code>${to.url || ''}</code>`;
+            } else if (to.protocol === 'multiball') {
+                let s = `${tag} <small>court</small> <code>${escapeHtml(to.court_id || '?')}</code>`;
+                if (!to.token_set) s += ` <small style="color:#e74c3c;">(no token)</small>`;
+                if (conn && conn.response_to_osc && conn.response_to_osc.enabled) {
+                    s += ` <span class="proto-tag proto-tag-osc" style="font-size:0.65rem; margin-left:0.4rem;" title="Result sent as OSC to ${conn.response_to_osc.ip}:${conn.response_to_osc.port} ${conn.response_to_osc.address}">↩ OSC</span>`;
+                }
+                return label + s;
             } else {
                 let s = `${tag} ${to.ip || ''}:${to.port || ''}`;
                 if (to.protocol === 'osc' && to.address) {
@@ -1374,6 +1434,16 @@
                 document.getElementById('to_port').value = conn.to.port || '';
             } else if (conn.to.protocol === 'json') {
                 document.getElementById('to_url').value = conn.to.url || '';
+            } else if (conn.to.protocol === 'multiball') {
+                document.getElementById('to_mb_base_url').value = conn.to.base_url || MB_DEFAULT_BASE_URL;
+                document.getElementById('to_mb_api_key').value = conn.to.api_key || '';
+                document.getElementById('to_mb_token').value = '';
+                document.getElementById('to_mb_token').placeholder = conn.to.token_set
+                    ? 'Token saved (leave empty to keep it)' : 'Paste the token';
+                document.getElementById('to_mb_court_id').value = conn.to.court_id || '';
+                document.getElementById('to_mb_start_delay').value =
+                    (conn.to.start_delay !== undefined && conn.to.start_delay !== null) ? conn.to.start_delay : 3;
+                fillResponseFields(conn);
             } else if (conn.to.protocol === 'http') {
                 document.getElementById('to_http_method').value = conn.to.method || 'POST';
                 toggleParamsSection();
@@ -1382,21 +1452,47 @@
                 if (conn.to.params) {
                     Object.entries(conn.to.params).forEach(([k, v]) => addParamField(k, v));
                 }
-                // Fill response_to_osc fields if present
-                if (conn.response_to_osc) {
-                    const cb = document.getElementById('to_response_enabled');
-                    if (cb) {
-                        cb.checked = !!conn.response_to_osc.enabled;
-                        toggleResponseFields();
-                        document.getElementById('to_resp_ip').value = conn.response_to_osc.ip || '';
-                        document.getElementById('to_resp_port').value = conn.response_to_osc.port || '';
-                        document.getElementById('to_resp_address').value = conn.response_to_osc.address || '';
-                    }
-                }
+                fillResponseFields(conn);
             }
 
             document.getElementById('add-connection-form').style.display = 'block';
             updateRequestPreview();
+        }
+
+        // Fill response_to_osc fields if present (HTTP and Multiball destinations)
+        function fillResponseFields(conn) {
+            if (!conn.response_to_osc) return;
+            const cb = document.getElementById('to_response_enabled');
+            if (!cb) return;
+            cb.checked = !!conn.response_to_osc.enabled;
+            toggleResponseFields();
+            document.getElementById('to_resp_ip').value = conn.response_to_osc.ip || '';
+            document.getElementById('to_resp_port').value = conn.response_to_osc.port || '';
+            document.getElementById('to_resp_address').value = conn.response_to_osc.address || '';
+        }
+
+        function responseFieldsHtml(title, help, addressPlaceholder) {
+            return `
+                    <div class="field mt-4">
+                        <label class="label" style="cursor:pointer;">
+                            <input type="checkbox" id="to_response_enabled" onchange="toggleResponseFields()"> ${title}
+                        </label>
+                        <p class="help">${help}</p>
+                    </div>
+                    <div id="response-osc-fields" style="display:none;">
+                        <div class="field">
+                            <label class="label">Response OSC IP</label>
+                            <input id="to_resp_ip" class="input" type="text" placeholder="192.168.50.226">
+                        </div>
+                        <div class="field">
+                            <label class="label">Response OSC Port</label>
+                            <input id="to_resp_port" class="input" type="number" placeholder="12097">
+                        </div>
+                        <div class="field">
+                            <label class="label">Response OSC Address</label>
+                            <input id="to_resp_address" class="input" type="text" placeholder="${addressPlaceholder}">
+                        </div>
+                    </div>`;
         }
 
         function updateFromFields() {
@@ -1502,26 +1598,7 @@
                             <button class="button is-link is-small mt-2" type="button" onclick="addParamField()"><i class="fas fa-plus" style="margin-right:0.3rem;"></i>Add parameter</button>
                         </div>
                     </div>
-                    <div class="field mt-4">
-                        <label class="label" style="cursor:pointer;">
-                            <input type="checkbox" id="to_response_enabled" onchange="toggleResponseFields()"> Monitor HTTP Response
-                        </label>
-                        <p class="help">Forward the HTTP response body as an OSC message</p>
-                    </div>
-                    <div id="response-osc-fields" style="display:none;">
-                        <div class="field">
-                            <label class="label">Response OSC IP</label>
-                            <input id="to_resp_ip" class="input" type="text" placeholder="192.168.50.226">
-                        </div>
-                        <div class="field">
-                            <label class="label">Response OSC Port</label>
-                            <input id="to_resp_port" class="input" type="number" placeholder="12097">
-                        </div>
-                        <div class="field">
-                            <label class="label">Response OSC Address</label>
-                            <input id="to_resp_address" class="input" type="text" placeholder="/api_response">
-                        </div>
-                    </div>`;
+` + responseFieldsHtml('Monitor HTTP Response', 'Forward the HTTP response body as an OSC message', '/api_response');
             } else if (protocol === 'json') {
                 container.innerHTML = `
                     <div class="field">
@@ -1529,6 +1606,40 @@
                         <input id="to_url" class="input" type="text" placeholder="http://192.168.1.63/json/state">
                     </div>
                     <p class="help" style="margin-top:-0.5rem;">The first source argument is sent as the raw JSON body (Content-Type: application/json).</p>`;
+            } else if (protocol === 'multiball') {
+                container.innerHTML = `
+                    <div class="field">
+                        <label class="label">API URL</label>
+                        <input id="to_mb_base_url" class="input" type="text" value="${MB_DEFAULT_BASE_URL}">
+                    </div>
+                    <div class="field">
+                        <label class="label">API key</label>
+                        <input id="to_mb_api_key" class="input" type="text" autocomplete="off" spellcheck="false" placeholder="From Multiball admin, New API key">
+                    </div>
+                    <div class="field">
+                        <label class="label">Token</label>
+                        <input id="to_mb_token" class="input" type="password" autocomplete="new-password" spellcheck="false" placeholder="Paste the token">
+                        <p class="help">The API key and token are created in the Multiball admin (New API key) and shown only once. They are not your website login.</p>
+                    </div>
+                    <div class="field">
+                        <button class="button is-link is-small" type="button" id="mb-test-btn" onclick="mbTestAndList()"><i class="fas fa-plug" style="margin-right:0.4rem;"></i>Test and list</button>
+                        <p class="help">Read only: lists your courts, then the games installed on the selected court.</p>
+                    </div>
+                    <div id="mb-results"></div>
+                    <div class="field">
+                        <label class="label">Court ID</label>
+                        <input id="to_mb_court_id" class="input" type="text" spellcheck="false" placeholder="Click a court above, or paste its ID" oninput="updateRequestPreview()">
+                    </div>
+                    <div class="field">
+                        <label class="label">Delay before start (seconds)</label>
+                        <input id="to_mb_start_delay" class="input" type="number" min="0" max="60" step="0.5" value="3" oninput="updateRequestPreview()">
+                        <p class="help">Wait time between loading the game and starting it in <code>/start</code>, since the game takes time to load.</p>
+                    </div>` + responseFieldsHtml('Send the result to COGS (OSC)', 'After each action, send &lt;address&gt; &lt;action&gt; &lt;ok 1|0&gt; &lt;message&gt;', '/mb/result');
+                // The Multiball destination is driven by OSC: suggest the OSC source with the /mb prefix
+                const fromSel = document.getElementById('conn_from_protocol');
+                if (!fromSel.value) { fromSel.value = 'osc'; updateFromFields(); }
+                const patternEl = document.getElementById('from_address_pattern');
+                if (patternEl && !patternEl.value) patternEl.value = '/mb';
             }
             updateRequestPreview();
         }
@@ -1576,15 +1687,26 @@
             const toProtocol = document.getElementById('conn_to_protocol').value;
             const fromProtocol = document.getElementById('conn_from_protocol').value;
             const isOscToOsc = fromProtocol === 'osc' && toProtocol === 'osc';
+            const isMultiball = toProtocol === 'multiball';
 
             // OSC → OSC device-prefix routing: toggle help texts and hide the
             // Values field (positional args are passed through unchanged)
             const oscHelp = document.getElementById('osc-osc-help');
             if (oscHelp) oscHelp.style.display = isOscToOsc ? 'block' : 'none';
             const patternHelp = document.getElementById('pattern-prefix-help');
-            if (patternHelp) patternHelp.style.display = isOscToOsc ? 'block' : 'none';
+            if (patternHelp) patternHelp.style.display = (isOscToOsc || isMultiball) ? 'block' : 'none';
             const valuesField = document.getElementById('from-values-field');
-            if (valuesField) valuesField.style.display = isOscToOsc ? 'none' : '';
+            if (valuesField) valuesField.style.display = (isOscToOsc || isMultiball) ? 'none' : '';
+
+            const mbHelp = document.getElementById('multiball-help');
+            if (mbHelp) {
+                mbHelp.style.display = isMultiball ? 'block' : 'none';
+                if (isMultiball) renderMultiballHelp(fromProtocol);
+            }
+            if (isMultiball) {
+                previewBox.style.display = 'none';
+                return;
+            }
 
             // Hide preview when no destination selected, or for OSC destinations
             // fed by a non-OSC source (nothing useful to show)
@@ -1685,6 +1807,10 @@
                 showToast("Please select both source and destination protocols.", "warning");
                 return null;
             }
+            if (toProtocol === 'multiball' && fromProtocol !== 'osc') {
+                showToast("The Multiball destination only works with an OSC source.", "warning");
+                return null;
+            }
 
             // Build from
             let connFrom = { protocol: fromProtocol };
@@ -1698,8 +1824,8 @@
                     const v = input.value.trim();
                     if (v) values.push(v);
                 });
-                // Values do not apply to OSC → OSC (args are forwarded as-is)
-                if (values.length > 0 && toProtocol !== 'osc') connFrom.values = values;
+                // Values do not apply to OSC → OSC or Multiball (args are used as-is)
+                if (values.length > 0 && toProtocol !== 'osc' && toProtocol !== 'multiball') connFrom.values = values;
             } else if (fromProtocol === 'http') {
                 connFrom.endpoint = document.getElementById('from_endpoint').value;
             } else {
@@ -1721,6 +1847,14 @@
                 connTo.port = parseInt(document.getElementById('to_port').value) || 0;
             } else if (toProtocol === 'json') {
                 connTo.url = document.getElementById('to_url').value;
+            } else if (toProtocol === 'multiball') {
+                connTo.base_url = document.getElementById('to_mb_base_url').value.trim() || MB_DEFAULT_BASE_URL;
+                connTo.api_key = document.getElementById('to_mb_api_key').value.trim();
+                // Empty token = keep the saved one (the server never sends it back to the page)
+                connTo.token = document.getElementById('to_mb_token').value.trim();
+                connTo.court_id = document.getElementById('to_mb_court_id').value.trim();
+                const delay = parseFloat(document.getElementById('to_mb_start_delay').value);
+                connTo.start_delay = isNaN(delay) ? 3 : Math.min(Math.max(delay, 0), 60);
             } else if (toProtocol === 'http') {
                 connTo.method = document.getElementById('to_http_method').value;
                 connTo.url = document.getElementById('to_url').value;
@@ -1783,6 +1917,165 @@
                 fetchConnections();
                 closeConnectionForm();
             }).catch(err => showToast("Error: " + err.message, "error"));
+        }
+
+        // =====================
+        // Multiball (LYMB API)
+        // =====================
+        const MB_DEFAULT_BASE_URL = 'https://multiball-admin.net/api/v1.0';
+
+        function escapeHtml(value) {
+            return String(value === undefined || value === null ? '' : value)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function renderMultiballHelp(fromProtocol) {
+            const box = document.getElementById('multiball-help');
+            const patternEl = document.getElementById('from_address_pattern');
+            const p = escapeHtml((patternEl && patternEl.value.trim()) || '/mb');
+            const delayEl = document.getElementById('to_mb_start_delay');
+            const delay = escapeHtml((delayEl && delayEl.value) || '3');
+            const respEl = document.getElementById('to_resp_address');
+            const resp = escapeHtml((respEl && respEl.value.trim()) || '/mb/result');
+            const warning = fromProtocol && fromProtocol !== 'osc'
+                ? '<p class="mb-error">The Multiball destination only works with an OSC source.</p>' : '';
+            box.innerHTML = `${warning}
+                <strong><i class="fas fa-gamepad" style="margin-right:0.4rem;"></i>OSC messages to send from COGS</strong>
+                <table class="mb-cheatsheet" style="margin-top:0.5rem;">
+                    <tr><td><code>${p}/start &lt;gameId&gt; [duration] [difficulty]</code></td><td>Load the game, apply duration (seconds, 0 = unchanged) and difficulty (0 to 1) if given, wait ${delay} s, then start. One retry if the start fails.</td></tr>
+                    <tr><td><code>${p}/switch &lt;gameId&gt;</code></td><td>Load the game only.</td></tr>
+                    <tr><td><code>${p}/play [gameId]</code></td><td>Start the game (default: the last loaded game, else the game loaded on the court).</td></tr>
+                    <tr><td><code>${p}/stop [gameId]</code></td><td>Stop the game (default: the last started game, else the game running on the court).</td></tr>
+                    <tr><td><code>${p}/status</code></td><td>Read the court status and the current game.</td></tr>
+                </table>
+                <p style="margin-top:0.5rem;">Result sent back when enabled: <code>${resp} start 1 "Game started"</code>, <code>${resp} start 0 "&lt;error&gt;"</code>, <code>${resp} status 1 "online" "&lt;game name&gt;" "&lt;gameId&gt;"</code>.</p>
+                <p style="margin-top:0.3rem; color:var(--text-secondary);">Each action runs in the background (10 s timeout per request), so other OSC messages are never delayed. The token is never written to the logs.</p>`;
+        }
+
+        // Credentials for the read-only listing; an empty token reuses the saved one of the edited connection
+        function mbCredentials() {
+            const body = {
+                base_url: document.getElementById('to_mb_base_url').value.trim() || MB_DEFAULT_BASE_URL,
+                api_key: document.getElementById('to_mb_api_key').value.trim(),
+                token: document.getElementById('to_mb_token').value.trim(),
+            };
+            if (!body.token && editingIndex !== null) body.index = editingIndex;
+            return body;
+        }
+
+        function mbFetch(what, extra) {
+            return fetch('/multiball_list', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ what, ...mbCredentials(), ...(extra || {}) })
+            }).then(res => res.json());
+        }
+
+        function mbShowError(container, message) {
+            container.insertAdjacentHTML('beforeend', `<div class="mb-error"><i class="fas fa-exclamation-triangle" style="margin-right:0.4rem;"></i>${escapeHtml(message)}</div>`);
+        }
+
+        function mbTestAndList() {
+            const results = document.getElementById('mb-results');
+            const btn = document.getElementById('mb-test-btn');
+            results.innerHTML = '';
+            btn.classList.add('is-loading');
+            mbFetch('courts').then(data => {
+                const panel = document.createElement('div');
+                panel.className = 'mb-panel';
+                results.appendChild(panel);
+                if (!data.ok) {
+                    panel.innerHTML = '<strong>Courts</strong>';
+                    mbShowError(panel, (data.status ? 'HTTP ' + data.status + ': ' : '') + (data.error || 'Unknown error'));
+                    return;
+                }
+                const courts = data.courts || [];
+                panel.innerHTML = `<strong><i class="fas fa-check-circle" style="color:#00b894; margin-right:0.4rem;"></i>Connected. ${courts.length} court(s), click one to use it</strong>
+                    <div class="mb-list" id="mb-courts"></div>
+                    <div id="mb-games"></div>`;
+                const list = panel.querySelector('#mb-courts');
+                courts.forEach(c => {
+                    const row = document.createElement('div');
+                    row.className = 'mb-row is-clickable';
+                    row.dataset.id = c.id;
+                    row.innerHTML = `<div class="mb-main"><strong>${escapeHtml(c.title || '(no name)')}</strong>
+                        <div class="mb-sub">${escapeHtml(c.id)}${c.description ? ' · ' + escapeHtml(c.description) : ''}</div></div>`;
+                    row.onclick = () => mbSelectCourt(c.id);
+                    list.appendChild(row);
+                });
+                const current = document.getElementById('to_mb_court_id').value.trim();
+                if (current) mbSelectCourt(current);
+                else if (courts.length === 1) mbSelectCourt(courts[0].id);
+            }).catch(err => {
+                mbShowError(results, 'Error: ' + err.message);
+            }).finally(() => btn.classList.remove('is-loading'));
+        }
+
+        function mbSelectCourt(courtId) {
+            document.getElementById('to_mb_court_id').value = courtId;
+            document.querySelectorAll('#mb-courts .mb-row').forEach(r => r.classList.toggle('is-selected', r.dataset.id === courtId));
+            const box = document.getElementById('mb-games');
+            if (!box) return;
+            box.innerHTML = '<p style="margin-top:0.6rem;"><i class="fas fa-spinner fa-spin" style="margin-right:0.4rem;"></i>Loading games...</p>';
+            mbFetch('games', { court_id: courtId }).then(data => {
+                box.innerHTML = '';
+                if (!data.ok) {
+                    box.innerHTML = '<strong style="display:block; margin-top:0.6rem;">Games</strong>';
+                    mbShowError(box, (data.status ? 'HTTP ' + data.status + ': ' : '') + (data.error || 'Unknown error'));
+                    return;
+                }
+                const games = (data.games || []).slice().sort((a, b) =>
+                    String(a.dispName || a.name).localeCompare(String(b.dispName || b.name)));
+                box.innerHTML = `<strong style="display:block; margin-top:0.8rem;">${games.length} game(s) installed on this court</strong>
+                    <input class="input is-small" type="search" placeholder="Filter games" style="margin-top:0.4rem;" oninput="mbFilterGames(this.value)">
+                    <div class="mb-list" id="mb-games-list"></div>`;
+                const list = box.querySelector('#mb-games-list');
+                games.forEach(g => {
+                    const versions = (g.versions || []).map(v => (v && typeof v === 'object') ? (v.number || v.id || '') : v).filter(Boolean);
+                    const row = document.createElement('div');
+                    row.className = 'mb-row';
+                    row.dataset.search = [g.dispName, g.name, g.id].join(' ').toLowerCase();
+                    row.innerHTML = `<div class="mb-main"><strong>${escapeHtml(g.dispName || g.name || '(no name)')}</strong>
+                        <div class="mb-sub"><code>${escapeHtml(g.id)}</code>${g.name && g.dispName ? ' · ' + escapeHtml(g.name) : ''}${versions.length ? ' · versions ' + escapeHtml(versions.join(', ')) : ''}</div></div>
+                        <button class="button is-small" type="button" title="Copy the gameId"><i class="fas fa-copy"></i></button>`;
+                    row.querySelector('button').onclick = () => mbCopy(g.id);
+                    list.appendChild(row);
+                });
+            }).catch(err => {
+                box.innerHTML = '';
+                mbShowError(box, 'Error: ' + err.message);
+            });
+            updateRequestPreview();
+        }
+
+        function mbFilterGames(text) {
+            const q = text.trim().toLowerCase();
+            document.querySelectorAll('#mb-games-list .mb-row').forEach(r => {
+                r.style.display = !q || r.dataset.search.includes(q) ? '' : 'none';
+            });
+        }
+
+        function mbCopy(text) {
+            const done = () => showToast('gameId copied: ' + text, 'success');
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(done).catch(() => mbCopyFallback(text, done));
+            } else {
+                mbCopyFallback(text, done);
+            }
+        }
+
+        // The desktop window and plain http pages may not expose the async clipboard API
+        function mbCopyFallback(text, done) {
+            const area = document.createElement('textarea');
+            area.value = text;
+            area.style.position = 'fixed';
+            area.style.opacity = '0';
+            document.body.appendChild(area);
+            area.select();
+            try { document.execCommand('copy'); done(); }
+            catch (e) { showToast('Copy failed, select the ID by hand', 'warning'); }
+            area.remove();
         }
 
         // =====================
@@ -1896,6 +2189,17 @@
                 if (data.status !== 'success') showToast("Error: " + data.message, "error");
             })
             .catch(err => showToast("Error: " + err, "error"));
+        }
+
+        function exportConfig() {
+            const include = document.getElementById('export-include-secrets').checked;
+            if (include && !confirm("The exported file will contain your Multiball tokens. Anyone who gets this file can control your Multiball wall. Export anyway?")) return;
+            const a = document.createElement('a');
+            a.href = '/export_config' + (include ? '?include_secrets=1' : '');
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
         }
 
         function importConfig(input) {
