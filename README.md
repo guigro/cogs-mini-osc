@@ -261,7 +261,7 @@ Drive a Multiball wall from Cogs: load a game, set its duration and difficulty, 
 }
 ```
 
-**API key and token**: create them in the Multiball admin with the *New API key* button (they are shown only once). They are not your website login: with the login, the API answers `Invalid api key!`. Then use **Test and list** in the connection form: it lists your courts (click one to fill the court ID) and the games installed on it, with a button to copy each game ID. This button only reads, it never changes what the wall is doing.
+**API key and token**: create them in the Multiball admin with the *New API key* button (they are shown only once). They are not your website login: with the login, the API answers `Invalid api key!`. Then use **Test and list** in the connection form: it lists your courts (click one to fill the court ID) and the games installed on it with their asset flips, with a button to copy each game ID and flip ID. Some games installed on the wall are missing from that list: type their game ID in *Look up a game by its gameId* to see them and their flips. These buttons only read, they never change what the wall is doing.
 
 **OSC messages** (the prefix works like OSC to OSC routing: `/mb/<action>`):
 
@@ -272,10 +272,16 @@ Drive a Multiball wall from Cogs: load a game, set its duration and difficulty, 
 | `/mb/play [gameId]` | Starts the game (default: the last game loaded by Mini-OSC, else the one on the court). |
 | `/mb/stop [gameId]` | Stops the game (default: the last game started by Mini-OSC, else the one running on the court). |
 | `/mb/status` | Reads the court status and the current game. |
+| `/mb/flip <flipId> [baseGameId]` | Loads an asset flip (a base game with your own images) only. Its base game is remembered, so `/mb/play` and `/mb/stop` work without argument. |
+| `/mb/startflip <flipId> [baseGameId] [duration] [difficulty]` | Like `start`, with an asset flip: loads the flip, sets duration and difficulty on the base game, waits `start_delay`, then starts the base game (one retry). Send `""` as `baseGameId` to skip it and still give a duration. |
 
-A `stop`, `switch` or new `start` cancels a `start` that is still waiting for its delay. An unknown action or a missing game ID is logged and nothing is sent to the wall.
+**Base game of a flip**, in this order: the `baseGameId` given in the message; else the game whose `assetFlips` list contains the flip (read once from `GET /courts/{courtId}/games`, then cached); else the game shown by `GET /courts/{courtId}`, read `start_delay` seconds after loading the flip (some base games, such as Balloon Mania, are missing from the games list). If none is found, the flip is loaded anyway with a warning in the logs, `/mb/play` then needs a game ID, and `startflip` does not start. Giving `baseGameId` is the most reliable.
 
-**Result sent back to Cogs** (optional, `response_to_osc`): after each action, `<address> <action> <ok 1|0> <message>`, for example `/mb/result start 1 "Game started"` or `/mb/result start 0 "Switch game failed: Invalid api key!"`. For `status`: `/mb/result status 1 "online" "<game name>" "<gameId>"`.
+To turn the wall off after a game: `/mb/stop` stops the game but leaves it on screen, so follow it with `/mb/switch <gameId of your standby screen>`.
+
+A `stop`, `switch`, `flip` or new `start` cancels a `start` or `startflip` that is still waiting for its delay. An unknown action or a missing game ID is logged and nothing is sent to the wall.
+
+**Result sent back to Cogs** (optional, `response_to_osc`): after each action, `<address> <action> <ok 1|0> <message>`, for example `/mb/result start 1 "Game started"` or `/mb/result start 0 "Switch game failed: Invalid api key!"` or `/mb/result flip 1 "Flip loaded"`. For `status`: `/mb/result status 1 "online" "<game name>" "<gameId>"`.
 
 Notes:
 - Each action runs in its own thread with a 10 s timeout per request, so the OSC server is never blocked (even during the start delay).
@@ -375,7 +381,7 @@ HTTPS calls to the Multiball API with Basic authentication (API key as user name
 | `POST` | `/clear_logs` | Clear all logs |
 | `GET` | `/export_config` | Download the configuration (`?include_secrets=1` to include Multiball tokens) |
 | `POST` | `/import_config` | Replace the configuration |
-| `POST` | `/multiball_list` | Read only: list Multiball courts or the games of a court (used by *Test and list*) |
+| `POST` | `/multiball_list` | Read only: list Multiball courts, the games of a court with their asset flips, or one game by ID (used by *Test and list*) |
 
 ## Usage with Cogs
 
@@ -400,7 +406,7 @@ HTTPS calls to the Multiball API with Basic authentication (API key as user name
 ### Launch a Multiball game from Cogs
 
 1. Create a connection: **OSC to Multiball (LYMB API)**, prefix `/mb`, then fill the API key, token and court (use *Test and list*)
-2. In Cogs, send `/mb/start` with the game ID as first argument (optionally duration and difficulty), and `/mb/stop` at the end of the session
+2. In Cogs, send `/mb/start` with the game ID as first argument (optionally duration and difficulty), and `/mb/stop` at the end of the session. For an asset flip: `/mb/startflip <flipId> <baseGameId>`
 3. Enable the result to get `/mb/result <action> <1|0> <message>` back in Cogs and react if the launch fails
 
 ## License
