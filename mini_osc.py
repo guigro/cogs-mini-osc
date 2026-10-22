@@ -3,7 +3,7 @@ import re
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
-from flask import Flask, request, jsonify, send_from_directory, send_file
+from flask import Flask, request, jsonify, send_from_directory, send_file, Response
 import shutil
 import subprocess
 from flask_cors import CORS
@@ -14,6 +14,8 @@ import sys
 import requests
 import socket
 from pythonosc import dispatcher, osc_server, udp_client
+
+import multiball
 
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -31,6 +33,22 @@ logs = []
 ignore_rules = []
 file_logger = None
 restart_callback = None  # Défini par desktop.py ; sinon /restart sort avec le code 42
+
+
+# Destinations où l'address_pattern est un préfixe (/mb matche /mb/start, préfixe retiré)
+PREFIX_TARGET_TYPES = ("osc", "multiball")
+
+
+def _log_both(message, level="INFO"):
+    print(message)
+    add_log(message, level)
+
+
+# Actions Multiball : thread par message, mémoire du dernier jeu par mur (voir multiball.py)
+multiball_controller = multiball.Controller(
+    log=lambda message, level="INFO": _log_both(message, level),
+    send_osc=lambda ip, port, address, args: send_osc_message(ip, port, address, args),
+)
 
 
 class ConfigError(Exception):
@@ -189,6 +207,10 @@ def expand_connections(cfg):
                 target["params"] = to["params"]
         if to["protocol"] == "json":
             target["url"] = to.get("url", "")
+        if to["protocol"] == "multiball":
+            for key in ("base_url", "api_key", "token", "court_id", "start_delay"):
+                if key in to:
+                    target[key] = to[key]
         targets_dict[target_name] = target
 
         # Build internal route
@@ -245,6 +267,7 @@ def validate_config(cfg):
     if "file_logging" not in cfg:
         cfg["file_logging"] = {"enabled": False, "retention_days": 7, "log_level": "DEBUG"}
 
+    multiball.normalize_config(cfg)
     return cfg
 
 
@@ -262,7 +285,8 @@ def index():
 @app.route('/get_config', methods=['GET'])
 def get_config():
     config = load_config(CONFIG_FILE)
-    return jsonify(config)
+    # Le jeton Multiball ne quitte jamais le serveur : l'interface ne voit que token_set
+    return jsonify(multiball.mask_config(config))
 
 @app.route('/update_osc_server', methods=['POST'])
 def update_osc_server():
@@ -292,6 +316,7 @@ def add_connection():
     }
     if "response_to_osc" in data:
         new_conn["response_to_osc"] = data["response_to_osc"]
+    multiball.clean_connection(new_conn)
     config = load_config(CONFIG_FILE)
     config['connections'].append(new_conn)
     save_config(config)
@@ -311,6 +336,8 @@ def update_connection():
         }
         if "response_to_osc" in data:
             updated_conn["response_to_osc"] = data["response_to_osc"]
+        # Jeton laissé vide dans le formulaire : on garde celui déjà enregistré
+        multiball.clean_connection(updated_conn, config['connections'][index])
         config['connections'][index] = updated_conn
         save_config(config)
         expand_connections(config)
@@ -481,7 +508,17 @@ def open_folder():
 @app.route('/export_config', methods=['GET'])
 def export_config():
     name = f"mini-osc-config-{datetime.now().strftime('%Y-%m-%d')}.json"
-    return send_file(CONFIG_FILE, mimetype="application/json", as_attachment=True, download_name=name, max_age=0)
+    include_secrets = request.args.get("include_secrets") == "1"
+    try:
+        cfg = load_config(CONFIG_FILE)
+    except ConfigError:
+        cfg = None
+    if cfg is None or include_secrets or not multiball.has_tokens(cfg):
+        return send_file(CONFIG_FILE, mimetype="application/json", as_attachment=True, download_name=name, max_age=0)
+    # Par défaut, les jetons Multiball ne partent pas dans l'export
+    body = json.dumps(multiball.strip_tokens(cfg), indent=4)
+    return Response(body, mimetype="application/json",
+                    headers={"Content-Disposition": f"attachment; filename={name}", "Cache-Control": "no-cache"})
 
 
 @app.route('/import_config', methods=['POST'])
@@ -492,6 +529,14 @@ def import_config():
         return jsonify({"status": "error", "message": str(e)}), 400
     except Exception:
         return jsonify({"status": "error", "message": "The file is not valid JSON."}), 400
+
+    # Un export sans jeton réimporté ici garde les jetons Multiball actuels (même clé API)
+    try:
+        restored = multiball.restore_tokens(new_cfg, load_config(CONFIG_FILE))
+    except ConfigError:
+        restored = 0
+    if restored:
+        add_log(f"Import: kept the saved token of {restored} Multiball connection(s)")
 
     # Sauvegarde de la config actuelle avant de la remplacer
     backup_dir = os.path.join(DATA_DIR, "backups")
@@ -505,6 +550,38 @@ def import_config():
     setup_file_logging(new_cfg)
     add_log(f"Configuration imported ({len(new_cfg['connections'])} connections). Previous config saved to {backup}")
     return jsonify({"status": "success", "backup": backup, "connections": len(new_cfg["connections"])})
+
+
+@app.route('/multiball_list', methods=['POST'])
+def multiball_list():
+    """Bouton « Test and list » : lecture seule des terrains ou des jeux d'un terrain."""
+    data = request.get_json(silent=True) or {}
+    what = data.get("what")
+    if what not in ("courts", "games"):
+        return jsonify({"ok": False, "error": "'what' must be 'courts' or 'games'"}), 400
+    target = {
+        "base_url": str(data.get("base_url") or "").strip(),
+        "api_key": str(data.get("api_key") or "").strip(),
+        "token": str(data.get("token") or "").strip(),
+        "court_id": str(data.get("court_id") or "").strip(),
+    }
+    if not target["token"] and data.get("index") is not None:
+        # Jeton non ressaisi : on reprend le trio enregistré (adresse, clé, jeton) de cette connexion,
+        # jamais l'adresse saisie, pour que le jeton enregistré ne parte pas vers un autre serveur
+        try:
+            index = int(data["index"])
+            conns = load_config(CONFIG_FILE)["connections"]
+        except (ValueError, TypeError, ConfigError):
+            conns, index = [], -1
+        if 0 <= index < len(conns) and multiball.is_multiball(conns[index]):
+            saved = conns[index]["to"]
+            target.update(base_url=saved.get("base_url", ""), api_key=saved.get("api_key", ""),
+                          token=saved.get("token", ""))
+    if not target["api_key"] or not target["token"]:
+        return jsonify({"ok": False, "error": "Enter the API key and the token first."}), 400
+    if what == "games" and not target["court_id"]:
+        return jsonify({"ok": False, "error": "Choose a court first."}), 400
+    return jsonify(multiball.list_resources(what, target, log=_log_both))
 
 
 @app.route('/get_file_logging_status', methods=['GET'])
@@ -791,7 +868,7 @@ def handle_osc_in_message(address, args):
 
         # Les destinations OSC traitent le pattern comme un préfixe "device" :
         # /wled matche aussi /wled/state/on, et le préfixe est retiré avant le forward.
-        prefix_match = (target is not None and target["type"] == "osc"
+        prefix_match = (target is not None and target["type"] in PREFIX_TARGET_TYPES
                         and address.startswith(pattern + "/"))
         if pattern != address and not prefix_match:
             continue
@@ -815,7 +892,7 @@ def handle_osc_in_message(address, args):
         # (non applicable aux destinations OSC : args positionnels transmis tels quels)
         # ----------------------------------------------------------------
         from_cfg = route["from"]
-        if "values" in from_cfg and target["type"] != "osc":
+        if "values" in from_cfg and target["type"] not in PREFIX_TARGET_TYPES:
             mapped_args = {}
             for i, key_name in enumerate(from_cfg["values"]):
                 if i < len(args):
@@ -860,6 +937,10 @@ def handle_osc_in_message(address, args):
             send_to_udp(target, address, final_args)
         elif ttype == "json":
             send_to_json(target, final_args)
+        elif ttype == "multiball":
+            # /mb/start -> action "/start" ; /mb seul -> "" (erreur claire dans les logs)
+            sub_address = address[len(pattern):] if prefix_match else ""
+            multiball_controller.dispatch(target, sub_address, list(args), route.get("response_to_osc"))
         else:
             print(f"Type de cible inconnu: {ttype}")
         # Pour l'instant, on s'arrête après la première route matchée
