@@ -177,7 +177,8 @@ class Controller:
             return False, [label, 0, msg]
 
         out = [action, 1] + [str(v) for v in values]
-        self.log(f"[MULTIBALL] {action} OK: {' | '.join(str(v) for v in values)}", "INFO", token)
+        summary = " | ".join(str(v) for v in values if str(v)) or "-"
+        self.log(f"[MULTIBALL] {action} OK: {summary}", "INFO", token)
         self._feedback(response_cfg, out, token)
         return True, out
 
