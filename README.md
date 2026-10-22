@@ -1,6 +1,6 @@
 # Mini-OSC for Cogs
 
-A protocol bridge that converts and routes messages between **OSC**, **HTTP**, **TCP**, **UDP**, and **raw JSON**. Designed to help [Cogs](https://cogs.show) communicate with network devices and external services.
+A protocol bridge that converts and routes messages between **OSC**, **HTTP**, **TCP**, **UDP**, and **raw JSON**, and drives **Multiball** walls (LYMB.iO) through their cloud API. Designed to help [Cogs](https://cogs.show) communicate with network devices and external services.
 
 ## Desktop app (recommended)
 
@@ -241,6 +241,49 @@ Notes:
 - The `values` mapping does not apply to OSC destinations: arguments stay a positional list.
 - Connection order matters: the first matching connection wins.
 
+#### OSC to Multiball (LYMB.iO cloud API)
+
+Drive a Multiball wall from Cogs: load a game, set its duration and difficulty, start it, stop it, and read the court status, with plain OSC messages. Mini-OSC calls the official Multiball API (`https://multiball-admin.net/api/v1.0`, same service as `courtadmin.net`).
+
+```json
+{
+    "name": "OSC to Multiball API",
+    "from": { "protocol": "osc", "address_pattern": "/mb" },
+    "to": {
+        "protocol": "multiball",
+        "base_url": "https://multiball-admin.net/api/v1.0",
+        "api_key": "<API key>",
+        "token": "<token>",
+        "court_id": "<court id>",
+        "start_delay": 3
+    },
+    "response_to_osc": { "enabled": true, "ip": "192.168.50.248", "port": 12097, "address": "/mb/result" }
+}
+```
+
+**API key and token**: create them in the Multiball admin with the *New API key* button (they are shown only once). They are not your website login: with the login, the API answers `Invalid api key!`. Then use **Test and list** in the connection form: it lists your courts (click one to fill the court ID) and the games installed on it, with a button to copy each game ID. This button only reads, it never changes what the wall is doing.
+
+**OSC messages** (the prefix works like OSC to OSC routing: `/mb/<action>`):
+
+| Message | What it does |
+|---|---|
+| `/mb/start <gameId> [duration] [difficulty]` | Loads the game, sets duration (seconds, `0` = unchanged) and difficulty (`0` to `1`) if given, waits `start_delay` seconds while the game loads, then starts it. If the start fails, one retry after the same delay. |
+| `/mb/switch <gameId>` | Loads the game only. |
+| `/mb/play [gameId]` | Starts the game (default: the last game loaded by Mini-OSC, else the one on the court). |
+| `/mb/stop [gameId]` | Stops the game (default: the last game started by Mini-OSC, else the one running on the court). |
+| `/mb/status` | Reads the court status and the current game. |
+
+A `stop`, `switch` or new `start` cancels a `start` that is still waiting for its delay. An unknown action or a missing game ID is logged and nothing is sent to the wall.
+
+**Result sent back to Cogs** (optional, `response_to_osc`): after each action, `<address> <action> <ok 1|0> <message>`, for example `/mb/result start 1 "Game started"` or `/mb/result start 0 "Switch game failed: Invalid api key!"`. For `status`: `/mb/result status 1 "online" "<game name>" "<gameId>"`.
+
+Notes:
+- Each action runs in its own thread with a 10 s timeout per request, so the OSC server is never blocked (even during the start delay).
+- Each API call is logged with its method, URL, HTTP code and answer. The token and the `Authorization` header are never logged.
+- The token is never sent back to the web page: when editing a connection, leave the token field empty to keep the saved one.
+- *Export* leaves the tokens out unless you tick *Include Multiball tokens*. Re-importing such a file on the same machine keeps the saved token of each connection with the same API key.
+- When running from source, the configuration is `config.json` next to `mini_osc.py`, which is tracked by git in this repository: do not commit it after typing a token. The desktop app stores it in your user folder.
+
 ## Web Interface
 
 Three tabs accessible at `http://<ip>:<port>`:
@@ -312,12 +355,16 @@ JSON payload over a UDP datagram: `{"address": "/pattern", "args": [1, 2, 3]}`
 
 The first OSC argument is sent as the raw POST body with `Content-Type: application/json`. No `{"address": ..., "args": ...}` wrapper is added. Useful when the target device expects its own schema.
 
+#### Multiball
+
+HTTPS calls to the Multiball API with Basic authentication (API key as user name, token as password), then the optional OSC result described in [OSC to Multiball](#osc-to-multiball-lymbio-cloud-api).
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET/POST` | `/send_osc` | Send an OSC message (main entry point for HTTP) |
-| `GET` | `/get_config` | Get full configuration |
+| `GET` | `/get_config` | Get full configuration (Multiball tokens masked) |
 | `GET` | `/get_local_ip` | Get detected LAN IP address |
 | `POST` | `/add_connection` | Add a new connection |
 | `POST` | `/update_connection` | Update an existing connection |
@@ -326,6 +373,9 @@ The first OSC argument is sent as the raw POST body with `Content-Type: applicat
 | `POST` | `/update_flask_server` | Update Flask server settings |
 | `GET` | `/get_logs` | Get application logs |
 | `POST` | `/clear_logs` | Clear all logs |
+| `GET` | `/export_config` | Download the configuration (`?include_secrets=1` to include Multiball tokens) |
+| `POST` | `/import_config` | Replace the configuration |
+| `POST` | `/multiball_list` | Read only: list Multiball courts or the games of a court (used by *Test and list*) |
 
 ## Usage with Cogs
 
@@ -346,6 +396,12 @@ The first OSC argument is sent as the raw POST body with `Content-Type: applicat
 1. Create a connection: **OSC to HTTP** with `response_to_osc` enabled
 2. Cogs sends an OSC message, Mini-OSC calls the API, and forwards the response back as a new OSC message
 3. Read each field with `osc.message?.arguments[0]`, `[1]`, etc.
+
+### Launch a Multiball game from Cogs
+
+1. Create a connection: **OSC to Multiball (LYMB API)**, prefix `/mb`, then fill the API key, token and court (use *Test and list*)
+2. In Cogs, send `/mb/start` with the game ID as first argument (optionally duration and difficulty), and `/mb/stop` at the end of the session
+3. Enable the result to get `/mb/result <action> <1|0> <message>` back in Cogs and react if the launch fails
 
 ## License
 
