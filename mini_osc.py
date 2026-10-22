@@ -554,16 +554,17 @@ def import_config():
 
 @app.route('/multiball_list', methods=['POST'])
 def multiball_list():
-    """Bouton « Test and list » : lecture seule des terrains ou des jeux d'un terrain."""
+    """Bouton « Test and list » : lecture seule des terrains, des jeux d'un terrain ou d'un jeu par son id."""
     data = request.get_json(silent=True) or {}
     what = data.get("what")
-    if what not in ("courts", "games"):
-        return jsonify({"ok": False, "error": "'what' must be 'courts' or 'games'"}), 400
+    if what not in ("courts", "games", "game"):
+        return jsonify({"ok": False, "error": "'what' must be 'courts', 'games' or 'game'"}), 400
     target = {
         "base_url": str(data.get("base_url") or "").strip(),
         "api_key": str(data.get("api_key") or "").strip(),
         "token": str(data.get("token") or "").strip(),
         "court_id": str(data.get("court_id") or "").strip(),
+        "game_id": str(data.get("game_id") or "").strip(),
     }
     if not target["token"] and data.get("index") is not None:
         # Jeton non ressaisi : on reprend le trio enregistré (adresse, clé, jeton) de cette connexion,
@@ -581,6 +582,8 @@ def multiball_list():
         return jsonify({"ok": False, "error": "Enter the API key and the token first."}), 400
     if what == "games" and not target["court_id"]:
         return jsonify({"ok": False, "error": "Choose a court first."}), 400
+    if what == "game" and not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", target["game_id"]):
+        return jsonify({"ok": False, "error": "Enter a valid gameId."}), 400
     return jsonify(multiball.list_resources(what, target, log=_log_both))
 
 

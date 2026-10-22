@@ -1,6 +1,6 @@
 """Destination Multiball : pilote un mur Multiball (LYMB.iO) via son API cloud.
 
-COGS envoie <préfixe>/<action> en OSC (start, switch, play, stop, status). Chaque action tourne
+COGS envoie <préfixe>/<action> en OSC (start, switch, play, stop, status, flip, startflip). Chaque action tourne
 dans son propre thread pour ne jamais bloquer le serveur OSC. Le jeton n'est jamais journalisé.
 
 Ce module ne dépend pas de mini_osc : la fonction de log et l'envoi OSC lui sont injectés.
@@ -15,7 +15,8 @@ DEFAULT_BASE_URL = "https://multiball-admin.net/api/v1.0"
 REQUEST_TIMEOUT = 10  # secondes ; le cloud est plus lent que le réseau local
 DEFAULT_START_DELAY = 3.0
 MAX_START_DELAY = 60.0
-ACTIONS = ("start", "switch", "play", "stop", "status")
+ACTIONS = ("start", "switch", "play", "stop", "status", "flip", "startflip")
+ACTIONS_HINT = "start, switch, play, stop, status, flip or startflip"
 LOG_BODY_MAX = 300
 
 
@@ -140,7 +141,8 @@ class Controller:
         """Mémoire par mur : dernier jeu chargé, dernier jeu lancé, séquence start en attente."""
         key = (base_url_of(target), str(target.get("court_id") or ""))
         with self._lock:
-            return self._states.setdefault(key, {"last_loaded": None, "last_started": None, "pending": None})
+            return self._states.setdefault(key, {"last_loaded": None, "last_started": None, "pending": None,
+                                                 "needs_game_id": False, "flips": {}})
 
     def dispatch(self, target, sub_address, args, response_cfg=None):
         """Lance l'action dans un thread et rend la main tout de suite."""
@@ -157,9 +159,9 @@ class Controller:
         label = action
         try:
             if not action:
-                raise ActionError("No action after the prefix: use start, switch, play, stop or status")
+                raise ActionError("No action after the prefix: use " + ACTIONS_HINT)
             if action not in ACTIONS:
-                raise ActionError(f"Unknown action '{raw}': use start, switch, play, stop or status")
+                raise ActionError(f"Unknown action '{raw}': use " + ACTIONS_HINT)
             missing = [f for f in ("api_key", "token", "court_id") if not str(target.get(f) or "").strip()]
             if missing:
                 raise ActionError("Incomplete Multiball connection, missing: " + ", ".join(missing))
@@ -214,31 +216,57 @@ class Controller:
 
     # ---------- actions ----------
 
-    def _do_start(self, target, args):
-        game_id = _arg_text(args, 0)
-        if not game_id:
-            raise ActionError("Missing gameId: /start <gameId> [duration] [difficulty]")
+    def _start_options(self, args, first=1):
+        """Lit [duration] [difficulty] aux positions first et first + 1."""
         duration = None
-        d = _arg_text(args, 1)
+        d = _arg_text(args, first)
         if d is not None:
             seconds = _number(d, "duration")
             duration = int(round(seconds)) if seconds > 0 else None
         difficulty = None
-        v = _arg_text(args, 2)
+        v = _arg_text(args, first + 1)
         if v is not None:
             difficulty = _number(v, "difficulty")
             if not 0 <= difficulty <= 1:
                 raise ActionError(f"Invalid difficulty {v}: it must be between 0 and 1")
+        return duration, difficulty
 
+    def _loaded(self, state, game_id):
+        """Retient le jeu chargé ; None = jeu de base inconnu, /play exigera un gameId."""
+        state["last_loaded"] = game_id
+        state["needs_game_id"] = game_id is None
+
+    def _run_start(self, target, switch_body, game_id, duration, difficulty, resolve=None, flip_id=None):
+        """switchGame, configuration éventuelle, pause annulable, start (une nouvelle tentative).
+
+        Pour un flip : resolve() donne le jeu de base avant le chargement (argument ou liste des jeux).
+        S'il renvoie None, le jeu de base est lu sur le terrain après la pause, une fois le flip chargé.
+        """
         state = self.state(target)
         cancel = threading.Event()
         self._cancel_pending(state)
         with self._lock:
             state["pending"] = cancel
+        cancelled = "Cancelled before the game started (a newer command arrived)"
         try:
-            self._call(target, "PUT", self._court_path(target, "/switchGame"),
-                       {"gameId": game_id, "versionNumber": None}, "Switch game")
-            state["last_loaded"] = game_id
+            if resolve is not None:
+                game_id = resolve()
+                if cancel.is_set():
+                    raise ActionError(cancelled)
+            self._call(target, "PUT", self._court_path(target, "/switchGame"), switch_body, "Switch game")
+            self._loaded(state, game_id)
+
+            delay = start_delay_of(target)
+            waited = False
+            if game_id is None:
+                if cancel.wait(delay):
+                    raise ActionError(cancelled)
+                waited = True
+                game_id = self._base_from_court(target, flip_id)
+                if not game_id:
+                    raise ActionError(f"Base game of flip {flip_id} unknown: the flip is loaded but not started. "
+                                      "Use /startflip <flipId> <baseGameId>")
+                self._loaded(state, game_id)
 
             values = {}
             if duration is not None:
@@ -249,24 +277,31 @@ class Controller:
                 self._call(target, "PUT", self._court_path(target, "/setConfiguration"),
                            {"gameId": game_id, "values": values}, "Set configuration")
 
-            delay = start_delay_of(target)
-            if cancel.wait(delay):
-                raise ActionError("Cancelled before the game started (a newer command arrived)")
+            if not waited and cancel.wait(delay):
+                raise ActionError(cancelled)
             res = self._start_game(target, game_id)
             if not res.ok:
                 self.log(f"[MULTIBALL] Start failed ({res.message}), retrying once in {delay:g} s", "WARNING",
                          str(target.get("token") or ""))
                 if cancel.wait(delay):
-                    raise ActionError("Cancelled before the game started (a newer command arrived)")
+                    raise ActionError(cancelled)
                 res = self._start_game(target, game_id)
                 if not res.ok:
                     raise ActionError(f"Start failed: {res.message}")
             state["last_started"] = game_id
-            return [_ok_message(res, "Game started")]
+            return res
         finally:
             with self._lock:
                 if state["pending"] is cancel:
                     state["pending"] = None
+
+    def _do_start(self, target, args):
+        game_id = _arg_text(args, 0)
+        if not game_id:
+            raise ActionError("Missing gameId: /start <gameId> [duration] [difficulty]")
+        duration, difficulty = self._start_options(args)
+        res = self._run_start(target, {"gameId": game_id, "versionNumber": None}, game_id, duration, difficulty)
+        return [_ok_message(res, "Game started")]
 
     def _do_switch(self, target, args):
         game_id = _arg_text(args, 0)
@@ -276,12 +311,117 @@ class Controller:
         self._cancel_pending(state)
         res = self._call(target, "PUT", self._court_path(target, "/switchGame"),
                          {"gameId": game_id, "versionNumber": None}, "Switch game")
-        state["last_loaded"] = game_id
+        self._loaded(state, game_id)
         return [_ok_message(res, "Game loaded")]
+
+    # ---------- asset flips ----------
+    # Jeu de base d'un flip, dans l'ordre : argument baseGameId, liste assetFlips des jeux du terrain
+    # (mise en cache), puis jeu indiqué par le terrain une fois le flip chargé (certains jeux de base
+    # manquent dans GET /courts/{id}/games).
+
+    def _flip_args(self, args, usage):
+        flip_id = _arg_text(args, 0)
+        if not flip_id:
+            raise ActionError(f"Missing flipId: {usage}")
+        base = args[1] if len(args) > 1 else None
+        if isinstance(base, (int, float)):
+            raise ActionError(f"The 2nd argument is the base gameId (text), not the number {base}: {usage}. "
+                              'Send an empty string "" to skip the base gameId')
+        return flip_id, _arg_text(args, 1)
+
+    def _remember_flip(self, target, flip_id, game_id, game_name="", flip_name=""):
+        self.state(target)["flips"][flip_id] = {"game_id": game_id, "game_name": game_name, "flip_name": flip_name}
+
+    def _find_flip(self, target, flip_id):
+        """Jeu de base trouvé dans le cache ou la liste des jeux du terrain (lecture seule), sinon None.
+
+        La liste est relue quand le flip n'est pas en cache, pour voir un flip créé après le lancement.
+        """
+        state = self.state(target)
+        found = state["flips"].get(flip_id)
+        if found:
+            return found
+        res = self._api(target, "GET", self._court_path(target, "/games"))
+        if not res.ok:
+            self.log(f"[MULTIBALL] Could not read the games of the court to find flip {flip_id}: {res.message}",
+                     "WARNING", str(target.get("token") or ""))
+            return None
+        for game in list_games(res.data) or []:
+            for flip in game["assetFlips"]:
+                self._remember_flip(target, flip["flipId"], game["id"], game["dispName"] or game["name"], flip["name"])
+        return state["flips"].get(flip_id)
+
+    def _base_before_load(self, target, flip_id, base):
+        """Jeu de base connu avant le chargement (argument, puis liste), sinon None."""
+        if base:
+            self._remember_flip(target, flip_id, base)
+            self.log(f"[MULTIBALL] Flip {flip_id}: base game {base} (given in the message)")
+            return base
+        flip = self._find_flip(target, flip_id)
+        if flip:
+            self.log(f"[MULTIBALL] Flip '{flip['flip_name'] or flip_id}' is based on "
+                     f"'{flip['game_name'] or flip['game_id']}' ({flip['game_id']})")
+            return flip["game_id"]
+        return None
+
+    def _base_from_court(self, target, flip_id):
+        """Jeu chargé sur le terrain (lecture seule), utilisé comme jeu de base du flip ; None si illisible."""
+        res = self._api(target, "GET", self._court_path(target))
+        game = res.data.get("game") if res.ok and isinstance(res.data, dict) else None
+        game_id = str(game.get("id") or "") if isinstance(game, dict) else ""
+        token = str(target.get("token") or "")
+        if not game_id:
+            self.log(f"[MULTIBALL] Flip {flip_id} was not found in the games of this court and the court shows no "
+                     "game: its base game is unknown, so /play needs an explicit gameId", "WARNING", token)
+            return None
+        name = str(game.get("dispName") or game.get("name") or "")
+        self.log(f"[MULTIBALL] Flip {flip_id} was not found in the games of this court: base game read on the "
+                 f"court, '{name or game_id}' ({game_id})", "WARNING", token)
+        # Pas mis en cache : c'est une déduction, la liste des jeux reste prioritaire au prochain flip
+        return game_id
+
+    def _do_flip(self, target, args):
+        flip_id, base = self._flip_args(args, "/flip <flipId> [baseGameId]")
+        state = self.state(target)
+        self._cancel_pending(state)
+        res = self._call(target, "PUT", self._court_path(target, "/switchGame"), {"flipId": flip_id}, "Switch game")
+        game_id = self._base_before_load(target, flip_id, base)
+        self._loaded(state, game_id)
+        if game_id:
+            return [_ok_message(res, "Flip loaded")]
+
+        # Jeu de base absent de la liste : on le lit sur le terrain une fois le flip chargé.
+        # Une commande plus récente (switch, start, flip, stop) annule cette attente.
+        cancel = threading.Event()
+        with self._lock:
+            state["pending"] = cancel
+        try:
+            if cancel.wait(start_delay_of(target)):
+                return [_ok_message(res, "Flip loaded")]
+            game_id = self._base_from_court(target, flip_id)
+            if game_id:
+                self._loaded(state, game_id)
+                return [_ok_message(res, "Flip loaded")]
+            return [_ok_message(res, "Flip loaded (base game unknown)")]
+        finally:
+            with self._lock:
+                if state["pending"] is cancel:
+                    state["pending"] = None
+
+    def _do_startflip(self, target, args):
+        usage = "/startflip <flipId> [baseGameId] [duration] [difficulty]"
+        flip_id, base = self._flip_args(args, usage)
+        duration, difficulty = self._start_options(args, first=2)
+        res = self._run_start(target, {"flipId": flip_id}, None, duration, difficulty,
+                              resolve=lambda: self._base_before_load(target, flip_id, base), flip_id=flip_id)
+        return [_ok_message(res, "Game started")]
 
     def _do_play(self, target, args):
         state = self.state(target)
-        game_id = _arg_text(args, 0) or state["last_loaded"] or self._current_game(target)
+        game_id = _arg_text(args, 0)
+        if not game_id and state["needs_game_id"]:
+            raise ActionError("The base game of the loaded flip is unknown: use /play <gameId>")
+        game_id = game_id or state["last_loaded"] or self._current_game(target)
         if not game_id:
             raise ActionError("No game to start: give a gameId or load a game first")
         res = self._start_game(target, game_id)
@@ -332,22 +472,46 @@ class Controller:
 # Lecture pour le bouton « Test and list »
 ########################################
 
+def list_games(data):
+    """Jeux d'une réponse GET /courts/{id}/games, avec leurs asset flips (None si la réponse est inattendue)."""
+    results = data.get("results") if isinstance(data, dict) else None
+    if not isinstance(results, list):
+        return None
+    games = []
+    for r in results:
+        if not isinstance(r, dict):
+            continue
+        flips = [{"name": str(f.get("name") or ""), "flipId": str(f.get("flipId"))}
+                 for f in (r.get("assetFlips") or []) if isinstance(f, dict) and f.get("flipId")]
+        games.append({"id": str(r.get("id", "")), "name": r.get("name", ""), "dispName": r.get("dispName", ""),
+                      "versions": r.get("versions") or [], "assetFlips": flips})
+    return games
+
+
 def list_resources(what, target, log=None):
-    """Lecture seule : terrains (what="courts") ou jeux d'un terrain (what="games")."""
-    path = "/courts" if what == "courts" else f"/courts/{target.get('court_id')}/games"
+    """Lecture seule : terrains (what="courts"), jeux d'un terrain avec leurs flips (what="games"),
+    ou un seul jeu par son id (what="game", utile pour un jeu absent de la liste du terrain)."""
+    if what == "courts":
+        path = "/courts"
+    elif what == "game":
+        path = f"/games/{target.get('game_id')}"
+    else:
+        path = f"/courts/{target.get('court_id')}/games"
     res = api_request(target, "GET", path, log=log)
     if not res.ok:
         return {"ok": False, "status": res.status, "error": res.message}
-    results = res.data.get("results") if isinstance(res.data, dict) else None
-    if not isinstance(results, list):
-        return {"ok": False, "status": res.status, "error": "Unexpected answer from the Multiball API"}
-    items = [r for r in results if isinstance(r, dict)]
+    if what == "game" and isinstance(res.data, dict) and "results" not in res.data:
+        res.data = {"results": [res.data]}
+    unexpected = {"ok": False, "status": res.status, "error": "Unexpected answer from the Multiball API"}
     if what == "courts":
+        results = res.data.get("results") if isinstance(res.data, dict) else None
+        if not isinstance(results, list):
+            return unexpected
         return {"ok": True, "courts": [{"id": str(r.get("id", "")), "title": r.get("title", ""),
-                                        "description": r.get("description", "")} for r in items]}
-    return {"ok": True, "games": [{"id": str(r.get("id", "")), "name": r.get("name", ""),
-                                   "dispName": r.get("dispName", ""), "versions": r.get("versions") or []}
-                                  for r in items]}
+                                        "description": r.get("description", "")}
+                                       for r in results if isinstance(r, dict)]}
+    games = list_games(res.data)
+    return unexpected if games is None else {"ok": True, "games": games}
 
 
 ########################################

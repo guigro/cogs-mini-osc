@@ -276,6 +276,229 @@ def test_invalid_messages_send_nothing(api, ctrl, rec, target, sub, args, expect
     assert rec.sent[-1][3][1] == 0
 
 
+# ---------- asset flips ----------
+
+TENNIS = "TENNIS-GAME-ID"
+FLIP = "4a9e69b06468a52f27380935"
+GAMES = {"count": 2, "results": [
+    {"id": GAME, "name": "shooting", "dispName": "Eclipsium Drone Defense", "versions": ["0.3.7"]},
+    {"id": TENNIS, "name": "tennis", "dispName": "Tennis", "versions": ["1.0"],
+     "assetFlips": [{"name": "Padel", "flipId": FLIP}, {"name": "Halloween", "flipId": "FLIP-HALLOWEEN"}]},
+]}
+
+
+BALLOON = "dd049d96a5892a438c97ab5c"
+COURT_STATUS = {"title": "Eclipsium-Nantes", "status": "online",
+                "game": {"id": BALLOON, "name": "com.funwithballs.balloon", "dispName": "Balloon Mania"}}
+
+
+def games_api(api, games=GAMES, court=COURT_STATUS):
+    def handler(m, p, b):
+        if (m, p) == ("GET", f"/courts/{COURT}/games"):
+            return FakeResponse(200, games)
+        if (m, p) == ("GET", f"/courts/{COURT}"):
+            return FakeResponse(200, court)
+        return FakeResponse(200, {"message": "OK"})
+    api.handler = handler
+
+
+def test_flip_sends_only_the_flip_id(api, ctrl, rec, target):
+    games_api(api)
+    ok, out = ctrl.handle(target, "/flip", [FLIP], FEEDBACK)
+    assert ok
+    assert api.calls[0]["path"] == f"/courts/{COURT}/switchGame"
+    assert api.calls[0]["body"] == {"flipId": FLIP}
+    assert "gameId" not in api.calls[0]["body"]
+    assert api.paths()[1] == ("GET", f"/courts/{COURT}/games")
+    assert rec.sent[-1][3][:2] == ["flip", 1]
+    assert "based on 'Tennis'" in rec.text()
+
+
+def test_flip_then_play_and_stop_use_the_base_game(api, ctrl, target):
+    games_api(api)
+    ctrl.handle(target, "/flip", [FLIP])
+    ctrl.handle(target, "/play", [])
+    ctrl.handle(target, "/stop", [])
+    assert api.paths()[-2:] == [("PUT", f"/games/{TENNIS}/start"), ("PUT", f"/games/{TENNIS}/stop/")]
+
+
+def test_flip_games_are_cached(api, ctrl, target):
+    games_api(api)
+    ctrl.handle(target, "/flip", [FLIP])
+    ctrl.handle(target, "/flip", ["FLIP-HALLOWEEN"])
+    assert [p for m, p in api.paths() if m == "GET"] == [f"/courts/{COURT}/games"]
+
+
+def test_flip_created_later_is_found(api, ctrl, target):
+    games_api(api, {"count": 0, "results": []})
+    ctrl.handle(target, "/flip", [FLIP])
+    games_api(api)
+    ctrl.handle(target, "/flip", [FLIP])
+    ctrl.handle(target, "/play", [])
+    assert api.paths()[-1] == ("PUT", f"/games/{TENNIS}/start")
+
+
+def test_unknown_flip_is_loaded_but_play_needs_a_game_id(api, ctrl, rec, target):
+    games_api(api, court={"status": "online", "game": None})
+    ctrl.handle(target, "/switch", [GAME])
+    ok, out = ctrl.handle(target, "/flip", ["NOT-A-FLIP"], FEEDBACK)
+    assert ok and api.calls[1]["body"] == {"flipId": "NOT-A-FLIP"}
+    assert any(level == "WARNING" and "NOT-A-FLIP was not found" in m and "/play needs" in m
+               for level, m in rec.logs)
+    calls = len(api.calls)
+    ok, out = ctrl.handle(target, "/play", [])
+    assert not ok and "use /play <gameId>" in out[2] and len(api.calls) == calls
+    ok, _ = ctrl.handle(target, "/play", [TENNIS])
+    assert ok and api.paths()[-1] == ("PUT", f"/games/{TENNIS}/start")
+    ctrl.handle(target, "/switch", [GAME])
+    ok, _ = ctrl.handle(target, "/play", [])
+    assert ok and api.paths()[-1] == ("PUT", f"/games/{GAME}/start")
+
+
+def test_flip_when_games_cannot_be_read(api, ctrl, rec, target):
+    api.handler = lambda m, p, b: FakeResponse(500, {"message": "boom"}) if m == "GET" \
+        else FakeResponse(200, {"message": "OK"})
+    ok, _ = ctrl.handle(target, "/flip", [FLIP])
+    assert ok
+    ok, out = ctrl.handle(target, "/play", [])
+    assert not ok and "gameId" in out[2]
+
+
+def test_startflip_sequence(api, ctrl, rec, target):
+    games_api(api)
+    ok, out = ctrl.handle(target, "/startflip", [FLIP, "", 300, 0.5], FEEDBACK)
+    assert ok and out[:2] == ["startflip", 1]
+    assert api.paths() == [
+        ("GET", f"/courts/{COURT}/games"),
+        ("PUT", f"/courts/{COURT}/switchGame"),
+        ("PUT", f"/courts/{COURT}/setConfiguration"),
+        ("PUT", f"/games/{TENNIS}/start"),
+    ]
+    bodies = [c["body"] for c in api.calls]
+    assert bodies[1] == {"flipId": FLIP}
+    assert bodies[2] == {"gameId": TENNIS, "values": {"duration": 300, "difficulty": 0.5}}
+    ctrl.handle(target, "/stop", [])
+    assert api.paths()[-1] == ("PUT", f"/games/{TENNIS}/stop/")
+
+
+def test_startflip_retries_once(api, ctrl, target):
+    attempts = []
+
+    def handler(method, path, body):
+        if method == "GET":
+            return FakeResponse(200, GAMES)
+        if path.endswith("/start"):
+            attempts.append(1)
+            return FakeResponse(400, {"message": "Game not ready"}) if len(attempts) == 1 \
+                else FakeResponse(200, {"message": "Game started"})
+        return FakeResponse(200, {})
+    api.handler = handler
+    ok, _ = ctrl.handle(target, "/startflip", [FLIP])
+    assert ok and len(attempts) == 2
+    assert ("PUT", f"/courts/{COURT}/setConfiguration") not in api.paths()
+
+
+def test_startflip_unknown_flip_everywhere_loads_but_does_not_start(api, ctrl, rec, target):
+    games_api(api, court={"status": "online", "game": None})
+    ok, out = ctrl.handle(target, "/startflip", ["NOT-A-FLIP"], FEEDBACK)
+    assert not ok and "loaded but not started" in out[2]
+    assert [c for c in api.calls if c["method"] == "PUT"][0]["body"] == {"flipId": "NOT-A-FLIP"}
+    assert not any(p.endswith("/start") for _, p in api.paths())
+    assert rec.sent[-1][3][:2] == ["startflip", 0]
+
+
+def test_flip_with_base_game_id_skips_the_list(api, ctrl, target):
+    games_api(api)
+    ok, _ = ctrl.handle(target, "/flip", ["FLIP-BALLOON", BALLOON])
+    assert ok and api.paths() == [("PUT", f"/courts/{COURT}/switchGame")]
+    ctrl.handle(target, "/play", [])
+    ctrl.handle(target, "/stop", [])
+    assert api.paths()[-2:] == [("PUT", f"/games/{BALLOON}/start"), ("PUT", f"/games/{BALLOON}/stop/")]
+    ctrl.handle(target, "/flip", ["FLIP-BALLOON"])
+    assert [m for m, _ in api.paths()].count("GET") == 0
+
+
+def test_startflip_with_base_game_id(api, ctrl, target):
+    games_api(api)
+    ok, _ = ctrl.handle(target, "/startflip", ["FLIP-BALLOON", BALLOON, 120])
+    assert ok and api.paths() == [
+        ("PUT", f"/courts/{COURT}/switchGame"),
+        ("PUT", f"/courts/{COURT}/setConfiguration"),
+        ("PUT", f"/games/{BALLOON}/start"),
+    ]
+    assert api.calls[0]["body"] == {"flipId": "FLIP-BALLOON"}
+    assert api.calls[1]["body"] == {"gameId": BALLOON, "values": {"duration": 120}}
+
+
+def test_flip_missing_from_the_list_uses_the_court_game(api, ctrl, rec, target):
+    games_api(api)
+    ok, _ = ctrl.handle(target, "/flip", ["FLIP-BALLOON"])
+    assert ok
+    assert api.paths() == [("PUT", f"/courts/{COURT}/switchGame"), ("GET", f"/courts/{COURT}/games"),
+                           ("GET", f"/courts/{COURT}")]
+    assert "base game read on the court, 'Balloon Mania'" in rec.text()
+    ctrl.handle(target, "/play", [])
+    assert api.paths()[-1] == ("PUT", f"/games/{BALLOON}/start")
+
+
+def test_startflip_missing_from_the_list_reads_the_court_after_loading(api, ctrl, target):
+    games_api(api)
+    target["start_delay"] = 0.2
+    ok, _ = ctrl.handle(target, "/startflip", ["FLIP-BALLOON", "", 0, 0.3])
+    assert ok and api.paths() == [
+        ("GET", f"/courts/{COURT}/games"),
+        ("PUT", f"/courts/{COURT}/switchGame"),
+        ("GET", f"/courts/{COURT}"),
+        ("PUT", f"/courts/{COURT}/setConfiguration"),
+        ("PUT", f"/games/{BALLOON}/start"),
+    ]
+    switch, court = api.calls[1], api.calls[2]
+    assert court["time"] - switch["time"] >= 0.19
+    assert api.calls[3]["body"] == {"gameId": BALLOON, "values": {"difficulty": 0.3}}
+
+
+def test_play_during_the_flip_court_wait_needs_a_game_id(api, ctrl, target):
+    games_api(api)
+    target["start_delay"] = 0.5
+    ctrl.handle(target, "/switch", [GAME])
+    thread = ctrl.dispatch(target, "/flip", ["FLIP-BALLOON"])
+    time.sleep(0.15)
+    ok, out = ctrl.handle(target, "/play", [])
+    assert not ok and "use /play <gameId>" in out[2]
+    thread.join(3)
+    ok, _ = ctrl.handle(target, "/play", [])
+    assert ok and api.paths()[-1] == ("PUT", f"/games/{BALLOON}/start")
+
+
+def test_stop_cancels_a_pending_startflip(api, ctrl, target):
+    games_api(api)
+    target["start_delay"] = 1.0
+    thread = ctrl.dispatch(target, "/startflip", [FLIP])
+    time.sleep(0.15)
+    ctrl.handle(target, "/stop", [])
+    thread.join(3)
+    assert ("PUT", f"/games/{TENNIS}/start") not in api.paths()
+
+
+@pytest.mark.parametrize("sub,args,expected", [
+    ("/flip", [], "Missing flipId"),
+    ("/startflip", [], "Missing flipId"),
+    ("/startflip", [FLIP, "", "abc"], "Invalid duration"),
+    ("/startflip", [FLIP, "", 0, 3], "between 0 and 1"),
+    ("/startflip", [FLIP, 300], "not the number 300"),
+    ("/flip", [FLIP, 2], "base gameId"),
+])
+def test_invalid_flip_messages_send_nothing(api, ctrl, target, sub, args, expected):
+    ok, out = ctrl.handle(target, sub, args)
+    assert not ok and api.calls == [] and expected in out[2]
+
+
+def test_routing_prefix_to_flip(routing):
+    mini_osc.handle_osc_in_message("/mb/flip", (FLIP,))
+    mini_osc.handle_osc_in_message("/mb/startflip", (FLIP, 300))
+    assert [(sub, args) for _, sub, args, _ in routing["mb"]] == [("/flip", [FLIP]), ("/startflip", [FLIP, 300])]
+
+
 def test_incomplete_connection_sends_nothing(api, ctrl, target):
     target["token"] = ""
     ok, out = ctrl.handle(target, "/status", [])
@@ -453,14 +676,31 @@ def test_multiball_list_courts_and_games(client, api):
         {"id": COURT, "title": "Eclipsium-Nantes", "description": "", "status": "online"}]}) if p == "/courts" \
         else FakeResponse(200, {"count": 1, "results": [
             {"id": GAME, "name": "com.funwithballs.eclipsium_shootingrange",
-             "dispName": "Eclipsium Drone Defense", "versions": ["0.3.1", "0.3.7"]}]})
+             "dispName": "Eclipsium Drone Defense", "versions": ["0.3.1", "0.3.7"],
+             "assetFlips": [{"name": "Padel", "flipId": "4a9e69b06468a52f27380935"}, {"name": "no id"}]}]})
     res = client.post("/multiball_list", json={"what": "courts", "base_url": BASE, "api_key": KEY, "token": TOKEN})
     assert res.get_json() == {"ok": True, "courts": [{"id": COURT, "title": "Eclipsium-Nantes", "description": ""}]}
     res = client.post("/multiball_list", json={"what": "games", "base_url": BASE, "api_key": KEY,
                                                "token": TOKEN, "court_id": COURT})
     games = res.get_json()["games"]
     assert games[0]["id"] == GAME and games[0]["versions"] == ["0.3.1", "0.3.7"]
+    assert games[0]["assetFlips"] == [{"name": "Padel", "flipId": "4a9e69b06468a52f27380935"}]
     assert all(c["method"] == "GET" for c in api.calls)
+
+
+def test_multiball_list_one_game(client, api):
+    api.handler = lambda m, p, b: FakeResponse(200, {
+        "id": BALLOON, "name": "com.funwithballs.balloon", "dispName": "Balloon Mania", "versions": ["6.0.4"],
+        "assetFlips": [{"name": "Halloween", "flipId": "FLIP-H"}]})
+    res = client.post("/multiball_list", json={"what": "game", "base_url": BASE, "api_key": KEY,
+                                               "token": TOKEN, "game_id": BALLOON})
+    data = res.get_json()
+    assert data["ok"] and data["games"][0]["id"] == BALLOON
+    assert data["games"][0]["assetFlips"] == [{"name": "Halloween", "flipId": "FLIP-H"}]
+    assert api.calls[0]["method"] == "GET" and api.calls[0]["path"] == f"/games/{BALLOON}"
+    for bad in ("", "../courts", "a b"):
+        assert client.post("/multiball_list", json={"what": "game", "api_key": KEY, "token": TOKEN,
+                                                    "game_id": bad}).status_code == 400
 
 
 def test_multiball_list_shows_api_errors(client, api):
